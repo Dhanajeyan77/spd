@@ -23,8 +23,21 @@ if not os.path.exists(USER_DB):
 
 # --- DATABASE HELPERS ---
 def load_db():
-    with open(USER_DB, 'r') as f: return json.load(f)
-
+    # If the file doesn't exist, create it with empty braces
+    if not os.path.exists(USER_DB):
+        with open(USER_DB, 'w') as f:
+            json.dump({}, f)
+        return {}
+    
+    try:
+        with open(USER_DB, 'r') as f:
+            content = f.read().strip()
+            if not content: # If file is totally empty
+                return {}
+            return json.loads(content)
+    except (json.JSONDecodeError, FileNotFoundError):
+        # If the file is corrupted, return empty dictionary
+        return {}
 def save_db(data):
     with open(USER_DB, 'w') as f: json.dump(data, f, indent=4)
 
