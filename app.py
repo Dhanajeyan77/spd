@@ -15,7 +15,7 @@ MAIL_PW = "iibl iezd nvac yxqr"
 REPORT_DIR = 'reports'
 USER_DB = 'users.json'
 
-# Ensure directories exist
+# Ensure system folders exist
 if not os.path.exists(REPORT_DIR): os.makedirs(REPORT_DIR)
 
 # --- DATABASE HELPERS ---
@@ -38,7 +38,7 @@ def send_audit_email(recipient_email, repo_name):
     msg['Subject'] = f"🛡️ SPD Alert: Security Audit Complete for {repo_name}"
     msg['From'] = MAIL_ID
     msg['To'] = recipient_email
-    msg.set_content(f"Hello,\n\nThe security audit for {repo_name} is complete.\n\nYou can view the detailed SAST/DAST findings here: https://spd-1j53.onrender.com/dashboard")
+    msg.set_content(f"Hello,\n\nThe security audit for {repo_name} is complete.\n\nView the SAST/DAST findings here: https://spd-1j53.onrender.com/dashboard\n\n- Kamaraj SPD Team")
     try:
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
             smtp.login(MAIL_ID, MAIL_PW)
@@ -80,15 +80,19 @@ def dashboard():
     if 'username' not in session: return redirect('/')
     un = session['username']
     user_path = os.path.join(REPORT_DIR, un)
+    # Lists all HTML and TXT reports found for this user
     reports = os.listdir(user_path) if os.path.exists(user_path) else []
     return render_template('dashboard.html', username=un, reports=reports)
 
 @app.route('/inject', methods=['POST'])
 def inject_yaml():
     if 'username' not in session: return redirect('/')
-    owner, repo, token = request.form.get('owner'), request.form.get('repo'), request.form.get('token')
+    owner = request.form.get('owner')
+    repo = request.form.get('repo')
+    token = request.form.get('token')
     username = session['username']
 
+    # Optimized for Flask (Port 5000) as per demo requirements
     yaml_content = f"""
 name: SPD Security Audit
 on: [push]
@@ -104,12 +108,12 @@ jobs:
     url = f"https://api.github.com/repos/{owner}/{repo}/contents/.github/workflows/spd-audit.yml"
     headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
     
-    # Force SHA Reconciliation
+    # Force SHA Reconciliation to handle overwrites/deletions
     sha = None
     existing = requests.get(url, headers=headers)
     if existing.status_code == 200: sha = existing.json().get('sha')
 
-    payload = {"message": "🛡️ SPD Fresh Onboarding", "content": encoded}
+    payload = {"message": "🛡️ SPD System Onboarding", "content": encoded}
     if sha: payload["sha"] = sha
     
     requests.put(url, json=payload, headers=headers)
@@ -117,16 +121,25 @@ jobs:
 
 @app.route('/upload-report', methods=['POST'])
 def upload_report():
-    username = request.form.get('username')
+    un_received = request.form.get('username')
     file = request.files.get('report')
     filename = request.form.get('filename')
-    if username and file:
-        user_path = os.path.join(REPORT_DIR, username)
+    
+    if un_received and file:
+        db = load_db()
+        target_email = None
+        # Robust case-insensitive user lookup
+        for reg_user, data in db.items():
+            if reg_user.lower() == un_received.lower():
+                target_email = data['email']
+                break
+        
+        user_path = os.path.join(REPORT_DIR, un_received)
         if not os.path.exists(user_path): os.makedirs(user_path)
         file.save(os.path.join(user_path, filename))
-        # Automatic email on upload
-        db = load_db()
-        if username in db: send_audit_email(db[username]['email'], filename)
+        
+        if target_email:
+            send_audit_email(target_email, filename)
         return "OK", 200
     return "Fail", 400
 
@@ -147,9 +160,10 @@ def send_manual_mail():
     db = load_db()
     if un in db:
         send_audit_email(db[un]['email'], filename)
-        return f"<h1>Success!</h1><p>Report for {filename} has been sent to {db[un]['email']}.</p><a href='/dashboard'>Back</a>"
+        return f"<h1>Sent!</h1><p>Report sent to {db[un]['email']}.</p><a href='/dashboard'>Back</a>"
     return "Error", 400
 
 if __name__ == '__main__':
+    # Dynamic port for Render (10000) or Local (5000)
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)

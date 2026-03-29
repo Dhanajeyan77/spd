@@ -2,13 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>SPD | Master Dashboard</title>
+    <title>SPD | Security Command Center</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/dist/css/bootstrap.min.css">
     <style>
-        body { background-color: #0f172a; color: white; font-family: 'Segoe UI', sans-serif; }
+        body { background: #0f172a; color: white; font-family: 'Inter', sans-serif; }
         .glass-card { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; }
-        .repo-item { border-left: 4px solid #3b82f6; transition: 0.2s; }
-        .repo-item:hover { background: rgba(59, 130, 246, 0.1); }
+        .repo-group { border-left: 4px solid #3b82f6; background: rgba(59, 130, 246, 0.05); margin-bottom: 20px; padding: 15px; border-radius: 0 12px 12px 0; }
+        .btn-telemetry { background: #3b82f6; color: white; border: none; font-size: 0.8rem; }
+        .btn-telemetry:hover { background: #2563eb; color: white; }
+        .status-pill { font-size: 0.7rem; padding: 2px 8px; border-radius: 20px; background: #10b981; }
         .form-control, .form-select { background: rgba(0,0,0,0.2); border: 1px solid #334155; color: white; }
         .form-control:focus { background: rgba(0,0,0,0.3); color: white; border-color: #3b82f6; box-shadow: none; }
     </style>
@@ -16,9 +18,9 @@
 <body>
     <nav class="navbar navbar-dark border-bottom border-secondary mb-4">
         <div class="container">
-            <a class="navbar-brand fw-bold" href="#">🛡️ SPD PORTAL</a>
+            <a class="navbar-brand fw-bold" href="#">🛡️ SPD PORTAL <span class="text-info" style="font-size: 0.7rem;">v2.5</span></a>
             <div class="d-flex align-items-center">
-                <span class="me-3 text-secondary">Logged in: <b>{{ username }}</b></span>
+                <span class="me-3 small text-secondary">Operator: <b class="text-white">{{ username }}</b></span>
                 <a href="/logout" class="btn btn-outline-danger btn-sm">Logout</a>
             </div>
         </div>
@@ -27,55 +29,60 @@
     <div class="container">
         <div class="row">
             <div class="col-md-4">
-                <div class="glass-card p-4 mb-4">
-                    <h5 class="mb-3 text-info">➕ Secure New Project</h5>
+                <div class="glass-card p-4">
+                    <h6 class="text-info mb-3">➕ ONBOARD NEW REPOSITORY</h6>
                     <form action="/inject" method="POST">
-                        <div class="mb-3">
+                        <div class="mb-2">
                             <label class="small text-secondary">GitHub Owner</label>
-                            <input type="text" name="owner" class="form-control" value="{{ username }}" required>
+                            <input type="text" name="owner" class="form-control form-control-sm" value="{{ username }}" required>
                         </div>
-                        <div class="mb-3">
+                        <div class="mb-2">
                             <label class="small text-secondary">Repo Name</label>
-                            <input type="text" name="repo" class="form-control" placeholder="e.g. s_test" required>
+                            <input type="text" name="repo" class="form-control form-control-sm" placeholder="e.g. s_test" required>
                         </div>
-                        <div class="mb-3 row">
+                        <div class="row mb-2">
                             <div class="col">
                                 <label class="small text-secondary">Stack</label>
-                                <select name="stack" class="form-select">
+                                <select name="stack" class="form-select form-select-sm">
                                     <option value="python">Python/Flask</option>
                                     <option value="node">Node.js</option>
                                 </select>
                             </div>
                             <div class="col">
                                 <label class="small text-secondary">Port</label>
-                                <input type="number" name="port" class="form-control" value="5000">
+                                <input type="number" name="port" class="form-control form-control-sm" value="5000">
                             </div>
                         </div>
                         <div class="mb-3">
                             <label class="small text-secondary">GitHub Token (PAT)</label>
-                            <input type="password" name="token" class="form-control" required>
+                            <input type="password" name="token" class="form-control form-control-sm" required>
                         </div>
-                        <button type="submit" class="btn btn-info w-100 fw-bold">Inject Security Pipeline</button>
+                        <button type="submit" class="btn btn-info btn-sm w-100 fw-bold">Inject Security Pipeline</button>
                     </form>
                 </div>
             </div>
 
             <div class="col-md-8">
-                <h4 class="mb-4">🔍 Continuous Security Feed</h4>
+                <h5 class="mb-4">🔍 CONTINUOUS SECURITY FEED</h5>
+                
                 {% if reports %}
                     {% for report in reports %}
-                    <div class="glass-card repo-item p-3 mb-3 d-flex justify-content-between align-items-center">
+                    <div class="repo-group glass-card d-flex justify-content-between align-items-center">
                         <div>
-                            <h6 class="mb-1">{{ report }}</h6>
-                            <span class="badge bg-success">Active Monitoring</span>
-                            <span class="ms-2 small text-secondary">Audit Logs: Available</span>
+                            <span class="status-pill">ACTIVE MONITORING</span>
+                            <h6 class="mt-2 mb-1 text-white">{{ report }}</h6>
+                            <p class="small text-secondary mb-0">Telemetry Source: GitHub Actions Runner</p>
                         </div>
-                        <a href="/view/{{ username }}/{{ report }}" target="_blank" class="btn btn-sm btn-outline-info">View Telemetry</a>
+                        <div class="text-end">
+                            <a href="/report/{{ username }}/{{ report }}" class="btn btn-telemetry fw-bold px-3">
+                                VIEW ANALYSIS
+                            </a>
+                        </div>
                     </div>
                     {% endfor %}
                 {% else %}
                     <div class="text-center py-5 glass-card">
-                        <p class="text-secondary">No repositories onboarded yet. Use the form to start auditing.</p>
+                        <p class="text-secondary">No repositories detected. Start injection to begin auditing.</p>
                     </div>
                 {% endif %}
             </div>
