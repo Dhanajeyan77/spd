@@ -57,7 +57,7 @@ SPD Orchestrator Engine""")
                 )
 
         # SMTP with 15-second timeout to prevent Gunicorn Worker Timeout
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=15) as smtp:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 587, timeout=15) as smtp:
             smtp.login(MAIL_ID, MAIL_PW)
             smtp.send_message(msg)
         print(f"📧 Email successfully delivered to {email}")
