@@ -7,19 +7,18 @@ app = Flask(__name__)
 app.secret_key = "kamaraj_spd_secret"
 
 # --- CONFIGURATION ---
-# Use Environment Variables for Security (Set these in Render Dashboard)
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 MAIL_ID = "padmamunishdhanajeyan@gmail.com"
-MAIL_PW = "vnhp wnww vbwr hqjf" # Best to put this in Render Env too
+MAIL_PW = "vnhp wnww vbwr hqjf" 
 REPORT_DIR = os.path.join(os.getcwd(), 'reports')
 
-# Create base reports directory on startup
+# Ensure the base directory exists on startup
 if not os.path.exists(REPORT_DIR):
     os.makedirs(REPORT_DIR, exist_ok=True)
 
 # --- DB HELPER ---
 def get_db():
-    # Strict cleaning to fix the "invalid DSN" error
+    # Sanitizing DSN for Neon PostgreSQL compatibility
     clean_url = DATABASE_URL.strip().replace('"', '').replace("'", "").replace('\n', '').replace('\r', '')
     return psycopg2.connect(clean_url, cursor_factory=RealDictCursor)
 
@@ -30,39 +29,40 @@ def send_audit_email(email, filename, username):
     msg['From'] = MAIL_ID
     msg['To'] = email
     
-    # Body of the email
+    # Professional Email Body with Dashboard Link
     msg.set_content(f"""Hello {username},
 
-The automated security audit for your project has been completed.
-The full analysis report is attached to this email for your immediate review.
+The automated security audit for your project has been completed successfully.
+Please find the detailed analysis report attached to this email.
 
-You can also view your full history at: https://spd-1j53.onrender.com/dashboard
+You can also manage your assets and view history at:
+https://spd-1j53.onrender.com/dashboard
 
 Best regards,
 SPD Orchestrator Engine""")
 
-    # --- ATTACHMENT LOGIC ---
     try:
+        # Resolve path and attach file
         file_path = os.path.join(REPORT_DIR, username, filename)
-        with open(file_path, 'rb') as f:
-            file_data = f.read()
-            # Automatically detect if it's HTML or Text
-            maintype = 'text'
-            subtype = 'html' if filename.endswith('.html') else 'plain'
-            
-            msg.add_attachment(
-                file_data,
-                maintype=maintype,
-                subtype=subtype,
-                filename=filename
-            )
+        if os.path.exists(file_path):
+            with open(file_path, 'rb') as f:
+                file_data = f.read()
+                # Determine MIME type
+                subtype = 'html' if filename.endswith('.html') else 'plain'
+                msg.add_attachment(
+                    file_data,
+                    maintype='text',
+                    subtype=subtype,
+                    filename=filename
+                )
 
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+        # SMTP with 15-second timeout to prevent Gunicorn Worker Timeout
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=15) as smtp:
             smtp.login(MAIL_ID, MAIL_PW)
             smtp.send_message(msg)
-        print(f"📧 Email sent successfully to {email}")
+        print(f"📧 Email successfully delivered to {email}")
     except Exception as e:
-        print(f"Mail Error: {e}")
+        print(f"⚠️ SMTP Alert skipped: {str(e)}")
 
 # --- AUTH ROUTES ---
 @app.route('/')
@@ -103,7 +103,6 @@ def dashboard():
     cur.execute("SELECT * FROM url_targets WHERE user_id=%s", (session['user_id'],))
     urls = cur.fetchall()
     
-    # Securely fetch reports for current user
     user_path = os.path.join(REPORT_DIR, session['username'])
     reports = os.listdir(user_path) if os.path.exists(user_path) else []
     
@@ -150,7 +149,6 @@ def inject_workflow(repo_id):
     cur.execute("SELECT * FROM repositories WHERE id=%s AND user_id=%s", (repo_id, session['user_id']))
     repo = cur.fetchone()
     
-    # Ensure this points to your Render URL for the curl callback
     yaml_content = f"""name: SPD Audit
 on: [push]
 jobs:
@@ -180,22 +178,18 @@ def upload_report():
     try:
         un = request.form.get('username')
         file = request.files.get('report')
-        filename = request.form.get('filename') # e.g., s_test_zap.html
+        filename = request.form.get('filename')
         
-        # 1. Save Physical File
+        # 1. Physical Persistence
         user_path = os.path.join(REPORT_DIR, un)
         os.makedirs(user_path, exist_ok=True)
         file.save(os.path.join(user_path, filename))
 
-        # 2. Database Connection
+        # 2. Relational Synchronization
         conn = get_db(); cur = conn.cursor()
-        
-        # Fetch User Email
         cur.execute("SELECT email FROM users WHERE username=%s", (un,))
         user_data = cur.fetchone()
         
-        # 3. Insert into scan_reports table
-        # We assume the filename contains the repo name (e.g., 's_test')
         report_type = 'ZAP' if 'zap' in filename.lower() else 'Bandit'
         cur.execute("""
             INSERT INTO scan_reports (user_id, report_name, report_type, status)
@@ -204,25 +198,23 @@ def upload_report():
         
         conn.commit(); cur.close(); conn.close()
         
-        # 4. Trigger Email
+        # 3. Asynchronous SMTP Alert
         if user_data:
-            send_audit_email(user_data['email'], filename,un)
+            send_audit_email(user_data['email'], filename, un)
             
         return "OK", 200
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Ingestion Error: {e}")
         return str(e), 500
 
-# Change '/view/' to '/report/' to match your Dashboard links
+# Artifact Retrieval Route
 @app.route('/report/<username>/<filename>')
 def view_file(username, filename):
-    # Absolute path check for Render environment
     user_path = os.path.join(REPORT_DIR, username)
-    
     if not os.path.exists(os.path.join(user_path, filename)):
-        return "Report file not found on server", 404
-        
+        return "Report file not found", 404
     return send_from_directory(user_path, filename)
+
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
