@@ -10,7 +10,7 @@ app.secret_key = "kamaraj_spd_secret"
 # Use Environment Variables for Security (Set these in Render Dashboard)
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 MAIL_ID = "padmamunishdhanajeyan@gmail.com"
-MAIL_PW = "jvok ejcw xdpo szwq" # Best to put this in Render Env too
+MAIL_PW = "vnhp wnww vbwr hqjf" # Best to put this in Render Env too
 REPORT_DIR = os.path.join(os.getcwd(), 'reports')
 
 # Create base reports directory on startup
@@ -24,16 +24,43 @@ def get_db():
     return psycopg2.connect(clean_url, cursor_factory=RealDictCursor)
 
 # --- EMAIL ENGINE ---
-def send_audit_email(email, filename):
+def send_audit_email(email, filename, username):
     msg = EmailMessage()
-    msg['Subject'] = f"🛡️ SPD Alert: Security Audit Complete"
+    msg['Subject'] = f"🛡️ SPD Security Alert: Audit Complete for {filename}"
     msg['From'] = MAIL_ID
     msg['To'] = email
-    msg.set_content(f"The security audit for {filename} is complete.\n\nView results at: https://spd-1j53.onrender.com/dashboard")
+    
+    # Body of the email
+    msg.set_content(f"""Hello {username},
+
+The automated security audit for your project has been completed.
+The full analysis report is attached to this email for your immediate review.
+
+You can also view your full history at: https://spd-1j53.onrender.com/dashboard
+
+Best regards,
+SPD Orchestrator Engine""")
+
+    # --- ATTACHMENT LOGIC ---
     try:
+        file_path = os.path.join(REPORT_DIR, username, filename)
+        with open(file_path, 'rb') as f:
+            file_data = f.read()
+            # Automatically detect if it's HTML or Text
+            maintype = 'text'
+            subtype = 'html' if filename.endswith('.html') else 'plain'
+            
+            msg.add_attachment(
+                file_data,
+                maintype=maintype,
+                subtype=subtype,
+                filename=filename
+            )
+
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
             smtp.login(MAIL_ID, MAIL_PW)
             smtp.send_message(msg)
+        print(f"📧 Email sent successfully to {email}")
     except Exception as e:
         print(f"Mail Error: {e}")
 
@@ -153,31 +180,37 @@ def upload_report():
     try:
         un = request.form.get('username')
         file = request.files.get('report')
-        filename = request.form.get('filename')
+        filename = request.form.get('filename') # e.g., s_test_zap.html
         
-        if not un or not file:
-            return "Incomplete data", 400
-
-        # Safe folder creation
+        # 1. Save Physical File
         user_path = os.path.join(REPORT_DIR, un)
         os.makedirs(user_path, exist_ok=True)
-        
-        save_path = os.path.join(user_path, filename)
-        file.save(save_path)
-        print(f"Saved: {save_path}")
+        file.save(os.path.join(user_path, filename))
 
-        # Fetch email for alert
+        # 2. Database Connection
         conn = get_db(); cur = conn.cursor()
-        cur.execute("SELECT email FROM users WHERE username=%s", (un,))
-        user = cur.fetchone()
-        cur.close(); conn.close()
         
-        if user:
-            send_audit_email(user['email'], filename)
+        # Fetch User Email
+        cur.execute("SELECT email FROM users WHERE username=%s", (un,))
+        user_data = cur.fetchone()
+        
+        # 3. Insert into scan_reports table
+        # We assume the filename contains the repo name (e.g., 's_test')
+        report_type = 'ZAP' if 'zap' in filename.lower() else 'Bandit'
+        cur.execute("""
+            INSERT INTO scan_reports (user_id, report_name, report_type, status)
+            VALUES ((SELECT id FROM users WHERE username=%s), %s, %s, 'Completed')
+        """, (un, filename, report_type))
+        
+        conn.commit(); cur.close(); conn.close()
+        
+        # 4. Trigger Email
+        if user_data:
+            send_audit_email(user_data['email'], filename,un)
             
-        return "Upload Success", 200
+        return "OK", 200
     except Exception as e:
-        print(f"Upload Critical Error: {e}")
+        print(f"Error: {e}")
         return str(e), 500
 
 # Change '/view/' to '/report/' to match your Dashboard links
