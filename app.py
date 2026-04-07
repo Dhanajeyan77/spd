@@ -180,10 +180,16 @@ def upload_report():
         print(f"Upload Critical Error: {e}")
         return str(e), 500
 
-@app.route('/view/<username>/<filename>')
+# Change '/view/' to '/report/' to match your Dashboard links
+@app.route('/report/<username>/<filename>')
 def view_file(username, filename):
-    return send_from_directory(os.path.join(REPORT_DIR, username), filename)
-
+    # Absolute path check for Render environment
+    user_path = os.path.join(REPORT_DIR, username)
+    
+    if not os.path.exists(os.path.join(user_path, filename)):
+        return "Report file not found on server", 404
+        
+    return send_from_directory(user_path, filename)
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
