@@ -7,35 +7,35 @@ app = Flask(__name__)
 app.secret_key = "kamaraj_spd_secret"
 
 # --- CONFIGURATION ---
-
+# Use Environment Variables for Security (Set these in Render Dashboard)
+DATABASE_URL = os.environ.get('DATABASE_URL', '')
 MAIL_ID = "padmamunishdhanajeyan@gmail.com"
-MAIL_PW = "jvok ejcw xdpo szwq"
-REPORT_DIR = 'reports'
+MAIL_PW = "jvok ejcw xdpo szwq" # Best to put this in Render Env too
+REPORT_DIR = os.path.join(os.getcwd(), 'reports')
 
-if not os.path.exists(REPORT_DIR): os.makedirs(REPORT_DIR)
+# Create base reports directory on startup
+if not os.path.exists(REPORT_DIR):
+    os.makedirs(REPORT_DIR, exist_ok=True)
 
 # --- DB HELPER ---
 def get_db():
-    # 1. Get the raw string from environment
-    raw_url = os.environ.get('DATABASE_URL', '')
-    
-    # 2. Aggressive cleaning: strip spaces, remove " and ' quotes
-    clean_url = raw_url.strip().replace('"', '').replace("'", "").replace('\n', '').replace('\r', '')
-    
-    # 3. Connect using the sanitized string
+    # Strict cleaning to fix the "invalid DSN" error
+    clean_url = DATABASE_URL.strip().replace('"', '').replace("'", "").replace('\n', '').replace('\r', '')
     return psycopg2.connect(clean_url, cursor_factory=RealDictCursor)
+
 # --- EMAIL ENGINE ---
-def send_audit_email(email, repo_name):
+def send_audit_email(email, filename):
     msg = EmailMessage()
-    msg['Subject'] = f"🛡️ SPD Alert: Security Audit Complete for {repo_name}"
+    msg['Subject'] = f"🛡️ SPD Alert: Security Audit Complete"
     msg['From'] = MAIL_ID
     msg['To'] = email
-    msg.set_content(f"The security audit for {repo_name} is complete.\nView reports: https://spd-1j53.onrender.com/dashboard")
+    msg.set_content(f"The security audit for {filename} is complete.\n\nView results at: https://spd-1j53.onrender.com/dashboard")
     try:
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
             smtp.login(MAIL_ID, MAIL_PW)
             smtp.send_message(msg)
-    except Exception as e: print(f"Mail Error: {e}")
+    except Exception as e:
+        print(f"Mail Error: {e}")
 
 # --- AUTH ROUTES ---
 @app.route('/')
@@ -57,6 +57,7 @@ def login():
     conn = get_db(); cur = conn.cursor()
     cur.execute("SELECT id, username FROM users WHERE username=%s AND password=%s", (un, pw))
     user = cur.fetchone()
+    cur.close(); conn.close()
     if user:
         session['user_id'], session['username'] = user['id'], user['username']
         return redirect('/dashboard')
@@ -75,7 +76,7 @@ def dashboard():
     cur.execute("SELECT * FROM url_targets WHERE user_id=%s", (session['user_id'],))
     urls = cur.fetchall()
     
-    # Get physical files from folder
+    # Securely fetch reports for current user
     user_path = os.path.join(REPORT_DIR, session['username'])
     reports = os.listdir(user_path) if os.path.exists(user_path) else []
     
@@ -98,6 +99,13 @@ def delete_repo(id):
     conn.commit(); cur.close(); conn.close()
     return redirect('/dashboard')
 
+@app.route('/delete-url/<int:id>')
+def delete_url(id):
+    conn = get_db(); cur = conn.cursor()
+    cur.execute("DELETE FROM url_targets WHERE id=%s AND user_id=%s", (id, session['user_id']))
+    conn.commit(); cur.close(); conn.close()
+    return redirect('/dashboard')
+
 @app.route('/add-url', methods=['POST'])
 def add_url():
     name, url = request.form.get('name'), request.form.get('url')
@@ -115,9 +123,17 @@ def inject_workflow(repo_id):
     cur.execute("SELECT * FROM repositories WHERE id=%s AND user_id=%s", (repo_id, session['user_id']))
     repo = cur.fetchone()
     
-    yaml_content = f"name: SPD Audit\non: [push]\njobs:\n  audit:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: curl -s https://spd-1j53.onrender.com/static/engine.sh | bash -s -- {session['username']}"
-    encoded = base64.b64encode(yaml_content.encode()).decode()
+    # Ensure this points to your Render URL for the curl callback
+    yaml_content = f"""name: SPD Audit
+on: [push]
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: curl -s https://spd-1j53.onrender.com/static/engine.sh | bash -s -- {session['username']}"""
     
+    encoded = base64.b64encode(yaml_content.encode()).decode()
     url = f"https://api.github.com/repos/{repo['repo_owner']}/{repo['repo_name']}/contents/.github/workflows/spd-audit.yml"
     headers = {"Authorization": f"token {repo['github_token']}", "Accept": "application/vnd.github.v3+json"}
     
@@ -131,24 +147,39 @@ def inject_workflow(repo_id):
     cur.close(); conn.close()
     return redirect('/dashboard')
 
+# --- TELEMETRY INGESTION ---
 @app.route('/upload-report', methods=['POST'])
 def upload_report():
-    un = request.form.get('username')
-    file = request.files.get('report')
-    filename = request.form.get('filename')
-    
-    user_path = os.path.join(REPORT_DIR, un)
-    if not os.path.exists(user_path): os.makedirs(user_path)
-    file.save(os.path.join(user_path, filename))
-    
-    conn = get_db(); cur = conn.cursor()
-    cur.execute("SELECT email FROM users WHERE username=%s", (un,))
-    user = cur.fetchone()
-    if user: send_audit_email(user['email'], filename)
-    cur.close(); conn.close()
-    return "OK", 200
+    try:
+        un = request.form.get('username')
+        file = request.files.get('report')
+        filename = request.form.get('filename')
+        
+        if not un or not file:
+            return "Incomplete data", 400
 
-# Report viewers remain the same
+        # Safe folder creation
+        user_path = os.path.join(REPORT_DIR, un)
+        os.makedirs(user_path, exist_ok=True)
+        
+        save_path = os.path.join(user_path, filename)
+        file.save(save_path)
+        print(f"Saved: {save_path}")
+
+        # Fetch email for alert
+        conn = get_db(); cur = conn.cursor()
+        cur.execute("SELECT email FROM users WHERE username=%s", (un,))
+        user = cur.fetchone()
+        cur.close(); conn.close()
+        
+        if user:
+            send_audit_email(user['email'], filename)
+            
+        return "Upload Success", 200
+    except Exception as e:
+        print(f"Upload Critical Error: {e}")
+        return str(e), 500
+
 @app.route('/view/<username>/<filename>')
 def view_file(username, filename):
     return send_from_directory(os.path.join(REPORT_DIR, username), filename)
