@@ -7,7 +7,7 @@ app = Flask(__name__)
 app.secret_key = "kamaraj_spd_secret"
 
 # --- CONFIGURATION ---
-DATABASE_URL = os.environ.get('DATABASE_URL')
+
 MAIL_ID = "padmamunishdhanajeyan@gmail.com"
 MAIL_PW = "jvok ejcw xdpo szwq"
 REPORT_DIR = 'reports'
@@ -16,8 +16,14 @@ if not os.path.exists(REPORT_DIR): os.makedirs(REPORT_DIR)
 
 # --- DB HELPER ---
 def get_db():
-    return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
-
+    # 1. Get the raw string from environment
+    raw_url = os.environ.get('DATABASE_URL', '')
+    
+    # 2. Aggressive cleaning: strip spaces, remove " and ' quotes
+    clean_url = raw_url.strip().replace('"', '').replace("'", "").replace('\n', '').replace('\r', '')
+    
+    # 3. Connect using the sanitized string
+    return psycopg2.connect(clean_url, cursor_factory=RealDictCursor)
 # --- EMAIL ENGINE ---
 def send_audit_email(email, repo_name):
     msg = EmailMessage()
