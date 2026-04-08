@@ -25,7 +25,7 @@ if [ "$SCAN_TYPE" == "REPO" ]; then
     echo "🔍 Running SAST (Bandit)..."
     if [ -f requirements.txt ]; then python3 -m pip install -r requirements.txt --quiet; fi
     bandit -r . -f txt -o bandit_report.txt || true
-    
+
     echo "🌐 Launching Application Environment..."
     chmod -R 777 .
     python3 app.py > app_log.txt 2>&1 & 
@@ -45,9 +45,19 @@ docker run --rm -v $(pwd):/zap/wrk/:rw --network=host \
 # 4. Fix Permissions & Exfiltrate
 sudo chown -R $USER:$USER .
 
+# NEW: Clean the display name for safe filenames (removes dots and slashes)
+SAFE_FILENAME=$(echo $DISPLAY_NAME | sed 's/[^a-zA-Z0-9]/_/g')
+
 echo "📤 Sending telemetry to SPD Orchestrator..."
 # Send Bandit/Log
-curl -X POST -F "report=@bandit_report.txt" -F "filename=${DISPLAY_NAME}_sast.txt" -F "username=${USER_ID}" https://spd-1j53.onrender.com/upload-report
+curl -X POST -F "report=@bandit_report.txt" -F "filename=${SAFE_FILENAME}_sast.txt" -F "username=${USER_ID}" https://spd-1j53.onrender.com/upload-report
+
+# Send ZAP
+if [ -f zap_report.html ]; then
+    curl -X POST -F "report=@zap_report.html" -F "filename=${SAFE_FILENAME}_dast.html" -F "username=${USER_ID}" https://spd-1j53.onrender.com/upload-report
+else
+    echo "❌ Error: zap_report.html generation failed!"
+fi
 
 # Send ZAP
 if [ -f zap_report.html ]; then
