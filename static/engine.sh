@@ -37,17 +37,17 @@ else
 fi
 
 # 3. DAST (ZAP)
-echo "🚀 Preparing Workspace for ZAP..."
-# Create empty files and give everyone permission to write to them
-touch zap_report.html
-chmod 777 zap_report.html
+echo "🚀 Preparing Workspace Permissions..."
+# Create the files ZAP wants to write to and make them world-writable
+touch zap_report.html zap.yaml
+chmod 777 zap_report.html zap.yaml
 
 echo "🚀 Launching ZAP Baseline Scan against $TARGET_URL..."
-# Run ZAP (Note: We keep the volume mount -v $(pwd):/zap/wrk/:rw)
-docker run --rm -v $(pwd):/zap/wrk/:rw --network=host \
+# Run ZAP (Note: we use -u root to force permission override inside container)
+docker run --rm -v $(pwd):/zap/wrk/:rw -u root \
     ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
     -t "$TARGET_URL" -r zap_report.html || true
-
+ 
 # 4. Fix Permissions & Exfiltrate
 sudo chown -R $USER:$USER .
 
