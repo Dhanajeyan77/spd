@@ -46,7 +46,6 @@
         <div class="row g-4">
             <div class="col-lg-4">
                 <div class="glass-card p-4">
-                    
                     <div class="sidebar-section">
                         <h6 class="text-info d-flex align-items-center mb-3">
                             <i class="bi bi-github me-2"></i> ONBOARD REPOSITORY
@@ -111,7 +110,7 @@
                 </div>
                 
                 {% for repo in repos %}
-                <div class="repo-group glass-card p-4 d-flex justify-content-between align-items-center">
+                <div class="repo-group glass-card p-4 d-flex justify-content-between align-items-center mb-3">
                     <div class="d-flex align-items-center">
                         <div class="bg-info rounded-circle p-3 me-3" style="--bs-bg-opacity: .1;">
                             <i class="bi bi-shield-shaded text-info fs-4"></i>
@@ -119,11 +118,20 @@
                         <div>
                             <span class="badge badge-active mb-1">PIPELINE SECURED</span>
                             <h6 class="mb-1 text-white">{{ repo.repo_owner }}/{{ repo.repo_name }}</h6>
+                            
+                            <div class="d-flex gap-2 align-items-center">
+                                <span class="text-secondary" style="font-size: 0.75rem;">
+                                    <i class="bi bi-stack me-1"></i> Stack: <b class="text-info">Flask / Python</b>
+                                </span>
+                                <span class="text-secondary" style="font-size: 0.75rem;">
+                                    <i class="bi bi-ethernet me-1"></i> Port: <b class="text-info">5000</b>
+                                </span>
+                            </div>
                             <p class="small text-secondary mb-0">GitHub CI/CD Integration: Active</p>
                         </div>
                     </div>
                     <div class="d-flex gap-2">
-                        <a href="/inject/{{ repo.id }}" class="btn btn-telemetry btn-sm px-3">
+                        <a href="/inject/{{ repo.id }}" class="btn btn-telemetry btn-sm px-3" style="background: #0ea5e9; color: white; font-weight: bold;">
                             <i class="bi bi-lightning-charge-fill me-1"></i> TRIGGER AUDIT
                         </a>
                     </div>
