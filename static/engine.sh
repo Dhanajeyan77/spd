@@ -36,8 +36,14 @@ else
     echo "SAST skipped for remote URL target." > bandit_report.txt
 fi
 
-# 3. DAST (ZAP) - This now targets the dynamic URL
+# 3. DAST (ZAP)
+echo "🚀 Preparing Workspace for ZAP..."
+# Create empty files and give everyone permission to write to them
+touch zap_report.html
+chmod 777 zap_report.html
+
 echo "🚀 Launching ZAP Baseline Scan against $TARGET_URL..."
+# Run ZAP (Note: We keep the volume mount -v $(pwd):/zap/wrk/:rw)
 docker run --rm -v $(pwd):/zap/wrk/:rw --network=host \
     ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
     -t "$TARGET_URL" -r zap_report.html || true
