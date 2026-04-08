@@ -214,6 +214,53 @@ def view_file(username, filename):
     if not os.path.exists(os.path.join(user_path, filename)):
         return "Report file not found", 404
     return send_from_directory(user_path, filename)
+# Add this near your other orchestration routes
+@app.route('/scan-url/<int:url_id>')
+def scan_live_url(url_id):
+    if 'user_id' not in session: return redirect('/')
+    
+    # 1. Fetch the target URL from Neon
+    conn = get_db(); cur = conn.cursor()
+    cur.execute("SELECT * FROM url_targets WHERE id=%s AND user_id=%s", (url_id, session['user_id']))
+    target = cur.fetchone()
+    
+    if not target:
+        cur.close(); conn.close()
+        return "URL Target not found", 404
+
+    # 2. Configuration (Use Render Environment Variables for the Token!)
+    # GITHUB_TOKEN should be your PAT with 'workflow' scope
+    GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN') 
+    OWNER = "Dhanajeyan77"
+    REPO = "SPD-Engine-Runner"
+    
+    dispatch_url = f"https://api.github.com/repos/{OWNER}/{REPO}/actions/workflows/main.yml/dispatches"
+    
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    
+    # 3. The Payload - Matches the 'inputs' in your main.yml
+    payload = {
+        "ref": "main",
+        "inputs": {
+            "username": session['username'],
+            "target_url": target['target_url']
+        }
+    }
+    
+    # 4. Trigger the GitHub Runner
+    response = requests.post(dispatch_url, json=payload, headers=headers)
+    
+    cur.close(); conn.close()
+    
+    if response.status_code == 204:
+        print(f"🚀 SaaS Scan Triggered for {target['target_url']}")
+        return redirect('/dashboard')
+    else:
+        print(f"❌ Trigger Failed: {response.text}")
+        return f"GitHub API Error: {response.status_code}", 500
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
