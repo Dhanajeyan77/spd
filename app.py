@@ -2,18 +2,21 @@ import os, base64, requests, json, smtplib, psycopg2
 from psycopg2.extras import RealDictCursor
 from email.message import EmailMessage
 from flask import Flask, render_template, request, redirect, session, send_from_directory
-from celery import Celery # NEW IMPORT
+from celery import Celery 
 
 app = Flask(__name__)
 app.secret_key = "kamaraj_spd_secret"
 
 # --- CELERY & REDIS CONFIGURATION ---
-# We look for a REDIS_URL environment variable. If not found, it defaults to localhost for your testing.
-app.config['CELERY_BROKER_URL'] = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
-app.config['CELERY_RESULT_BACKEND'] = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+# HARDCODED FOR TESTING ONLY - DO NOT COMMIT TO GITHUB
+HARDCODED_REDIS = "rediss://default:gQAAAAAAAg5ZAAIgcDI1MjRlNjIwNjFkYzg0OTFiYjkwYTRkOGRkNTMyMzU2ZQ@huge-skunk-134745.upstash.io:6379?ssl_cert_reqs=CERT_NONE"
+
+app.config['CELERY_BROKER_URL'] = HARDCODED_REDIS
+app.config['CELERY_RESULT_BACKEND'] = HARDCODED_REDIS
 
 celery = Celery(app.name, broker=app.config['CELERY_BROKER_URL'])
 celery.conf.update(app.config)
+
 # --- CONFIGURATION ---
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 MAIL_ID = "padmamunishdhanajeyan@gmail.com"
@@ -29,6 +32,7 @@ def get_db():
     # Sanitizing DSN for Neon PostgreSQL compatibility
     clean_url = DATABASE_URL.strip().replace('"', '').replace("'", "").replace('\n', '').replace('\r', '')
     return psycopg2.connect(clean_url, cursor_factory=RealDictCursor)
+
 # --- SECURITY GRADING ENGINE ---
 def calculate_security_grade(file_path, report_type):
     """Parses raw telemetry files and applies the A/B/C Risk Matrix."""
@@ -40,26 +44,24 @@ def calculate_security_grade(file_path, report_type):
         medium_count = 0
 
         if report_type == 'Bandit':
-            # Bandit uses explicit severity tags
             high_count = content.count('severity: high')
             medium_count = content.count('severity: medium')
             
         elif report_type == 'ZAP':
-            # ZAP HTML reports use specific CSS classes for risk levels
             high_count = content.count('risk-3') # High
             medium_count = content.count('risk-2') # Medium
 
-        # The Grading Matrix Algorithm
         if high_count >= 1 or medium_count >= 3:
             return 'C' # Critical Exposure
         elif medium_count > 0:
-            return 'B' # Functional Security (Minor Leaks)
+            return 'B' # Functional Security
         else:
             return 'A' # Secure Perimeter
 
     except Exception as e:
         print(f"⚠️ Grading Parsing Error: {e}")
         return 'N/A'
+
 # --- EMAIL ENGINE ---
 def send_audit_email(email, filename, username):
     msg = EmailMessage()
@@ -67,7 +69,6 @@ def send_audit_email(email, filename, username):
     msg['From'] = MAIL_ID
     msg['To'] = email
     
-    # Professional Email Body with Dashboard Link
     msg.set_content(f"""Hello {username},
 
 The automated security audit for your project has been completed successfully.
@@ -80,21 +81,13 @@ Best regards,
 SPD Orchestrator Engine""")
 
     try:
-        # Resolve path and attach file
         file_path = os.path.join(REPORT_DIR, username, filename)
         if os.path.exists(file_path):
             with open(file_path, 'rb') as f:
                 file_data = f.read()
-                # Determine MIME type
                 subtype = 'html' if filename.endswith('.html') else 'plain'
-                msg.add_attachment(
-                    file_data,
-                    maintype='text',
-                    subtype=subtype,
-                    filename=filename
-                )
+                msg.add_attachment(file_data, maintype='text', subtype=subtype, filename=filename)
 
-        # SMTP with 15-second timeout to prevent Gunicorn Worker Timeout
         with smtplib.SMTP_SSL('smtp.gmail.com', 587, timeout=15) as smtp:
             smtp.login(MAIL_ID, MAIL_PW)
             smtp.send_message(msg)
@@ -130,10 +123,10 @@ def login():
 
 @app.route('/logout')
 def logout(): session.clear(); return redirect('/')
+
 # --- BACKGROUND WORKERS (CELERY) ---
 @celery.task(bind=True)
 def async_trigger_github_scan(self, repo_owner, repo_name, github_token, username):
-    """This function runs entirely in the background via Redis."""
     print(f"⚙️ Worker picked up task: Scanning {repo_owner}/{repo_name} for {username}")
     
     yaml_content = f"""name: SPD Audit
@@ -149,11 +142,9 @@ jobs:
     url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/contents/.github/workflows/spd-audit.yml"
     headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
     
-    # 1. Check if file exists to get the SHA
     res = requests.get(url, headers=headers)
     sha = res.json().get('sha') if res.status_code == 200 else None
     
-    # 2. Push the workflow (Triggers the scan)
     payload = {"message": "🛡️ SPD Injection", "content": encoded}
     if sha: payload["sha"] = sha
     
@@ -163,7 +154,6 @@ jobs:
         return f"Success: Triggered {repo_name}"
     else:
         return f"Failed: API returned {response.status_code}"
-
 
 # --- DASHBOARD & FLEET MANAGEMENT ---
 @app.route('/dashboard')
@@ -224,7 +214,6 @@ def inject_workflow(repo_id):
     cur.close(); conn.close()
     
     if repo:
-        # This is the magic! .delay() pushes the heavy API work to Upstash Redis instantly!
         async_trigger_github_scan.delay(
             repo['repo_owner'], 
             repo['repo_name'], 
@@ -234,7 +223,7 @@ def inject_workflow(repo_id):
         print("✅ Scan safely queued in Upstash Redis!")
         
     return redirect('/dashboard')
-# --- TELEMETRY INGESTION ---
+
 # --- TELEMETRY INGESTION ---
 @app.route('/upload-report', methods=['POST'])
 def upload_report():
@@ -242,13 +231,12 @@ def upload_report():
         un = request.form.get('username')
         filename = request.form.get('filename')
         file = request.files.get('report')
-        report_url = request.form.get('report_url') # Captures the GitHub Pages Link!
+        report_url = request.form.get('report_url') 
         
         report_type = 'ZAP' if 'zap' in filename.lower() or 'dast' in filename.lower() else 'Bandit'
         security_grade = 'N/A'
         final_status = 'Completed'
 
-        # SCENARIO A: A Physical File was sent (Bandit SAST)
         if file:
             user_path = os.path.join(REPORT_DIR, un)
             os.makedirs(user_path, exist_ok=True)
@@ -257,11 +245,8 @@ def upload_report():
             security_grade = calculate_security_grade(file_path, report_type)
             print(f"📊 Physical Telemetry Graded: {filename} received Grade {security_grade}")
 
-        # SCENARIO B: A GitHub Pages URL was sent (ZAP DAST)
         elif report_url:
-            final_status = report_url # Save the URL in the database so we can click it!
-            
-            # Fetch the live website text to calculate the A/B/C grade over the internet
+            final_status = report_url 
             resp = requests.get(report_url)
             if resp.status_code == 200:
                 content = resp.text.lower()
@@ -272,7 +257,6 @@ def upload_report():
                 else: security_grade = 'A'
             print(f"🔗 URL Telemetry Graded: Hosted at {report_url} received Grade {security_grade}")
 
-        # Relational Synchronization
         conn = get_db(); cur = conn.cursor()
         cur.execute("""
             INSERT INTO scan_reports (user_id, report_name, report_type, status, grade)
@@ -284,19 +268,18 @@ def upload_report():
     except Exception as e:
         print(f"Ingestion Error: {e}")
         return str(e), 500
-# Artifact Retrieval Route
+
 @app.route('/report/<username>/<filename>')
 def view_file(username, filename):
     user_path = os.path.join(REPORT_DIR, username)
     if not os.path.exists(os.path.join(user_path, filename)):
         return "Report file not found", 404
     return send_from_directory(user_path, filename)
-# Add this near your other orchestration routes
+
 @app.route('/scan-url/<int:url_id>')
 def scan_live_url(url_id):
     if 'user_id' not in session: return redirect('/')
     
-    # 1. Fetch the target URL from Neon
     conn = get_db(); cur = conn.cursor()
     cur.execute("SELECT * FROM url_targets WHERE id=%s AND user_id=%s", (url_id, session['user_id']))
     target = cur.fetchone()
@@ -305,8 +288,6 @@ def scan_live_url(url_id):
         cur.close(); conn.close()
         return "URL Target not found", 404
 
-    # 2. Configuration (Use Render Environment Variables for the Token!)
-    # GITHUB_TOKEN should be your PAT with 'workflow' scope
     GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN') 
     OWNER = "Dhanajeyan77"
     REPO = "SPD-Engine-Runner"
@@ -318,7 +299,6 @@ def scan_live_url(url_id):
         "Accept": "application/vnd.github.v3+json"
     }
     
-    # 3. The Payload - Matches the 'inputs' in your main.yml
     payload = {
         "ref": "main",
         "inputs": {
@@ -327,7 +307,6 @@ def scan_live_url(url_id):
         }
     }
     
-    # 4. Trigger the GitHub Runner
     response = requests.post(dispatch_url, json=payload, headers=headers)
     
     cur.close(); conn.close()
