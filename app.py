@@ -2,10 +2,18 @@ import os, base64, requests, json, smtplib, psycopg2
 from psycopg2.extras import RealDictCursor
 from email.message import EmailMessage
 from flask import Flask, render_template, request, redirect, session, send_from_directory
+from celery import Celery # NEW IMPORT
 
 app = Flask(__name__)
 app.secret_key = "kamaraj_spd_secret"
 
+# --- CELERY & REDIS CONFIGURATION ---
+# We look for a REDIS_URL environment variable. If not found, it defaults to localhost for your testing.
+app.config['CELERY_BROKER_URL'] = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+app.config['CELERY_RESULT_BACKEND'] = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+
+celery = Celery(app.name, broker=app.config['CELERY_BROKER_URL'])
+celery.conf.update(app.config)
 # --- CONFIGURATION ---
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 MAIL_ID = "padmamunishdhanajeyan@gmail.com"
@@ -21,7 +29,37 @@ def get_db():
     # Sanitizing DSN for Neon PostgreSQL compatibility
     clean_url = DATABASE_URL.strip().replace('"', '').replace("'", "").replace('\n', '').replace('\r', '')
     return psycopg2.connect(clean_url, cursor_factory=RealDictCursor)
+# --- SECURITY GRADING ENGINE ---
+def calculate_security_grade(file_path, report_type):
+    """Parses raw telemetry files and applies the A/B/C Risk Matrix."""
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read().lower()
 
+        high_count = 0
+        medium_count = 0
+
+        if report_type == 'Bandit':
+            # Bandit uses explicit severity tags
+            high_count = content.count('severity: high')
+            medium_count = content.count('severity: medium')
+            
+        elif report_type == 'ZAP':
+            # ZAP HTML reports use specific CSS classes for risk levels
+            high_count = content.count('risk-3') # High
+            medium_count = content.count('risk-2') # Medium
+
+        # The Grading Matrix Algorithm
+        if high_count >= 1 or medium_count >= 3:
+            return 'C' # Critical Exposure
+        elif medium_count > 0:
+            return 'B' # Functional Security (Minor Leaks)
+        else:
+            return 'A' # Secure Perimeter
+
+    except Exception as e:
+        print(f"⚠️ Grading Parsing Error: {e}")
+        return 'N/A'
 # --- EMAIL ENGINE ---
 def send_audit_email(email, filename, username):
     msg = EmailMessage()
@@ -92,6 +130,40 @@ def login():
 
 @app.route('/logout')
 def logout(): session.clear(); return redirect('/')
+# --- BACKGROUND WORKERS (CELERY) ---
+@celery.task(bind=True)
+def async_trigger_github_scan(self, repo_owner, repo_name, github_token, username):
+    """This function runs entirely in the background via Redis."""
+    print(f"⚙️ Worker picked up task: Scanning {repo_owner}/{repo_name} for {username}")
+    
+    yaml_content = f"""name: SPD Audit
+on: [push]
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: curl -s https://spd-1j53.onrender.com/static/engine.sh | bash -s -- {username}"""
+    
+    encoded = base64.b64encode(yaml_content.encode()).decode()
+    url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/contents/.github/workflows/spd-audit.yml"
+    headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
+    
+    # 1. Check if file exists to get the SHA
+    res = requests.get(url, headers=headers)
+    sha = res.json().get('sha') if res.status_code == 200 else None
+    
+    # 2. Push the workflow (Triggers the scan)
+    payload = {"message": "🛡️ SPD Injection", "content": encoded}
+    if sha: payload["sha"] = sha
+    
+    response = requests.put(url, json=payload, headers=headers)
+    
+    if response.status_code in [200, 201]:
+        return f"Success: Triggered {repo_name}"
+    else:
+        return f"Failed: API returned {response.status_code}"
+
 
 # --- DASHBOARD & FLEET MANAGEMENT ---
 @app.route('/dashboard')
@@ -145,33 +217,24 @@ def add_url():
 @app.route('/inject/<int:repo_id>')
 def inject_workflow(repo_id):
     if 'user_id' not in session: return redirect('/')
+    
     conn = get_db(); cur = conn.cursor()
     cur.execute("SELECT * FROM repositories WHERE id=%s AND user_id=%s", (repo_id, session['user_id']))
     repo = cur.fetchone()
-    
-    yaml_content = f"""name: SPD Audit
-on: [push]
-jobs:
-  audit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: curl -s https://spd-1j53.onrender.com/static/engine.sh | bash -s -- {session['username']}"""
-    
-    encoded = base64.b64encode(yaml_content.encode()).decode()
-    url = f"https://api.github.com/repos/{repo['repo_owner']}/{repo['repo_name']}/contents/.github/workflows/spd-audit.yml"
-    headers = {"Authorization": f"token {repo['github_token']}", "Accept": "application/vnd.github.v3+json"}
-    
-    res = requests.get(url, headers=headers)
-    sha = res.json().get('sha') if res.status_code == 200 else None
-    
-    payload = {"message": "🛡️ SPD Injection", "content": encoded}
-    if sha: payload["sha"] = sha
-    
-    requests.put(url, json=payload, headers=headers)
     cur.close(); conn.close()
+    
+    if repo:
+        # This is the magic! .delay() pushes the heavy API work to Upstash Redis instantly!
+        async_trigger_github_scan.delay(
+            repo['repo_owner'], 
+            repo['repo_name'], 
+            repo['github_token'], 
+            session['username']
+        )
+        print("✅ Scan safely queued in Upstash Redis!")
+        
     return redirect('/dashboard')
-
+# --- TELEMETRY INGESTION ---
 # --- TELEMETRY INGESTION ---
 @app.route('/upload-report', methods=['POST'])
 def upload_report():
@@ -183,23 +246,30 @@ def upload_report():
         # 1. Physical Persistence
         user_path = os.path.join(REPORT_DIR, un)
         os.makedirs(user_path, exist_ok=True)
-        file.save(os.path.join(user_path, filename))
+        file_path = os.path.join(user_path, filename)
+        file.save(file_path)
 
-        # 2. Relational Synchronization
+        # 2. Heuristic Security Grading (NEW)
+        report_type = 'ZAP' if 'zap' in filename.lower() or 'dast' in filename.lower() else 'Bandit'
+        security_grade = calculate_security_grade(file_path, report_type)
+        print(f"📊 Telemetry Graded: {filename} received Grade {security_grade}")
+
+        # 3. Relational Synchronization
         conn = get_db(); cur = conn.cursor()
         cur.execute("SELECT email FROM users WHERE username=%s", (un,))
         user_data = cur.fetchone()
         
-        report_type = 'ZAP' if 'zap' in filename.lower() else 'Bandit'
+        # Updated to include the 'grade' column
         cur.execute("""
-            INSERT INTO scan_reports (user_id, report_name, report_type, status)
-            VALUES ((SELECT id FROM users WHERE username=%s), %s, %s, 'Completed')
-        """, (un, filename, report_type))
+            INSERT INTO scan_reports (user_id, report_name, report_type, status, grade)
+            VALUES ((SELECT id FROM users WHERE username=%s), %s, %s, 'Completed', %s)
+        """, (un, filename, report_type, security_grade))
         
         conn.commit(); cur.close(); conn.close()
         
-        # 3. Asynchronous SMTP Alert
+        # 4. Asynchronous SMTP Alert
         if user_data:
+            # You could even pass the grade into the email if you update the email function!
             send_audit_email(user_data['email'], filename, un)
             
         return "OK", 200
