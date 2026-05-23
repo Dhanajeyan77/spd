@@ -240,43 +240,50 @@ def inject_workflow(repo_id):
 def upload_report():
     try:
         un = request.form.get('username')
-        file = request.files.get('report')
         filename = request.form.get('filename')
+        file = request.files.get('report')
+        report_url = request.form.get('report_url') # Captures the GitHub Pages Link!
         
-        # 1. Physical Persistence
-        user_path = os.path.join(REPORT_DIR, un)
-        os.makedirs(user_path, exist_ok=True)
-        file_path = os.path.join(user_path, filename)
-        file.save(file_path)
-
-        # 2. Heuristic Security Grading (NEW)
         report_type = 'ZAP' if 'zap' in filename.lower() or 'dast' in filename.lower() else 'Bandit'
-        security_grade = calculate_security_grade(file_path, report_type)
-        print(f"📊 Telemetry Graded: {filename} received Grade {security_grade}")
+        security_grade = 'N/A'
+        final_status = 'Completed'
 
-        # 3. Relational Synchronization
+        # SCENARIO A: A Physical File was sent (Bandit SAST)
+        if file:
+            user_path = os.path.join(REPORT_DIR, un)
+            os.makedirs(user_path, exist_ok=True)
+            file_path = os.path.join(user_path, filename)
+            file.save(file_path)
+            security_grade = calculate_security_grade(file_path, report_type)
+            print(f"📊 Physical Telemetry Graded: {filename} received Grade {security_grade}")
+
+        # SCENARIO B: A GitHub Pages URL was sent (ZAP DAST)
+        elif report_url:
+            final_status = report_url # Save the URL in the database so we can click it!
+            
+            # Fetch the live website text to calculate the A/B/C grade over the internet
+            resp = requests.get(report_url)
+            if resp.status_code == 200:
+                content = resp.text.lower()
+                high = content.count('risk-3')
+                med = content.count('risk-2')
+                if high >= 1 or med >= 3: security_grade = 'C'
+                elif med > 0: security_grade = 'B'
+                else: security_grade = 'A'
+            print(f"🔗 URL Telemetry Graded: Hosted at {report_url} received Grade {security_grade}")
+
+        # Relational Synchronization
         conn = get_db(); cur = conn.cursor()
-        cur.execute("SELECT email FROM users WHERE username=%s", (un,))
-        user_data = cur.fetchone()
-        
-        # Updated to include the 'grade' column
         cur.execute("""
             INSERT INTO scan_reports (user_id, report_name, report_type, status, grade)
-            VALUES ((SELECT id FROM users WHERE username=%s), %s, %s, 'Completed', %s)
-        """, (un, filename, report_type, security_grade))
-        
+            VALUES ((SELECT id FROM users WHERE username=%s), %s, %s, %s, %s)
+        """, (un, filename, report_type, final_status, security_grade))
         conn.commit(); cur.close(); conn.close()
         
-        # 4. Asynchronous SMTP Alert
-        if user_data:
-            # You could even pass the grade into the email if you update the email function!
-            send_audit_email(user_data['email'], filename, un)
-            
         return "OK", 200
     except Exception as e:
         print(f"Ingestion Error: {e}")
         return str(e), 500
-
 # Artifact Retrieval Route
 @app.route('/report/<username>/<filename>')
 def view_file(username, filename):
