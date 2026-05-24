@@ -160,13 +160,16 @@ jobs:
 def dashboard():
     if 'user_id' not in session: return redirect('/')
     conn = get_db(); cur = conn.cursor()
+    
     cur.execute("SELECT * FROM repositories WHERE user_id=%s", (session['user_id'],))
     repos = cur.fetchall()
+    
     cur.execute("SELECT * FROM url_targets WHERE user_id=%s", (session['user_id'],))
     urls = cur.fetchall()
     
-    user_path = os.path.join(REPORT_DIR, session['username'])
-    reports = os.listdir(user_path) if os.path.exists(user_path) else []
+    # NEW: Fetching the actual graded reports from the database!
+    cur.execute("SELECT * FROM scan_reports WHERE user_id=%s ORDER BY id DESC", (session['user_id'],))
+    reports = cur.fetchall()
     
     cur.close(); conn.close()
     return render_template('dashboard.html', repos=repos, urls=urls, reports=reports)

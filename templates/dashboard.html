@@ -7,33 +7,69 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <style>
-        body { background: #0b0f19; color: #e2e8f0; font-family: 'Inter', system-ui, sans-serif; }
-        .glass-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
-        .nav-custom { border-bottom: 1px solid #1e293b; background: #0f172a; }
-        .sidebar-section { border-bottom: 1px solid #334155; padding-bottom: 20px; margin-bottom: 20px; }
-        .btn-primary-custom { background: #3b82f6; border: none; font-weight: 600; padding: 10px; }
-        .btn-primary-custom:hover { background: #2563eb; }
-        .form-control { background: #0f172a; border: 1px solid #334155; color: white; }
-        .form-control:focus { background: #1e293b; border-color: #3b82f6; box-shadow: none; color: white; }
-        .badge-active { background: #059669; color: white; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1px; }
-        .badge-url { background: #7c3aed; color: white; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1px; }
-        ::-webkit-scrollbar { width: 8px; }
+        /* Modern Cyber-Grid Background */
+        body { 
+            background-color: #050b14; 
+            background-image: radial-gradient(#1e293b 1px, transparent 1px);
+            background-size: 24px 24px;
+            color: #e2e8f0; 
+            font-family: 'Inter', system-ui, sans-serif; 
+        }
+        
+        .glass-card { 
+            background: rgba(15, 23, 42, 0.85); 
+            backdrop-filter: blur(16px); 
+            border: 1px solid rgba(255, 255, 255, 0.05); 
+            border-radius: 12px; 
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3); 
+            transition: transform 0.2s ease, border-color 0.2s ease;
+        }
+        
+        .glass-card:hover {
+            border-color: rgba(59, 130, 246, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .nav-custom { border-bottom: 1px solid #1e293b; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); }
+        .sidebar-section { border-bottom: 1px solid #1e293b; padding-bottom: 20px; margin-bottom: 20px; }
+        
+        /* Custom Inputs */
+        .form-control { background: rgba(0,0,0,0.2); border: 1px solid #334155; color: white; }
+        .form-control:focus { background: rgba(0,0,0,0.4); border-color: #3b82f6; box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25); color: white; }
+        
+        /* Badges & Buttons */
+        .badge-active { background: rgba(5, 150, 105, 0.2); border: 1px solid #059669; color: #34d399; font-size: 0.65rem; letter-spacing: 1px; }
+        .badge-url { background: rgba(124, 58, 237, 0.2); border: 1px solid #7c3aed; color: #a78bfa; font-size: 0.65rem; letter-spacing: 1px; }
+        
+        .btn-trigger-sast { background: linear-gradient(135deg, #0ea5e9, #2563eb); border: none; font-weight: 600; box-shadow: 0 4px 10px rgba(14, 165, 233, 0.3); transition: all 0.2s;}
+        .btn-trigger-sast:hover { opacity: 0.9; transform: scale(1.02); color: white; }
+        
+        .btn-trigger-dast { background: linear-gradient(135deg, #8b5cf6, #6d28d9); border: none; font-weight: 600; box-shadow: 0 4px 10px rgba(139, 92, 246, 0.3); transition: all 0.2s;}
+        .btn-trigger-dast:hover { opacity: 0.9; transform: scale(1.02); color: white; }
+
+        /* Dynamic Grade Colors */
+        .grade-A { color: #10b981; border-color: #10b981; background: rgba(16, 185, 129, 0.1); }
+        .grade-B { color: #f59e0b; border-color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
+        .grade-C { color: #ef4444; border-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+        .grade-NA { color: #64748b; border-color: #64748b; background: rgba(100, 116, 139, 0.1); }
+
+        ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
     </style>
 </head>
 <body>
-    <nav class="navbar nav-custom py-3 mb-4">
+    <nav class="navbar nav-custom py-3 mb-4 sticky-top">
         <div class="container">
-            <a class="navbar-brand d-flex align-items-center fw-bold" href="#">
-                <i class="bi bi-shield-check text-info me-2 fs-3"></i>
-                SPD ORCHESTRATOR <span class="badge bg-info ms-2" style="font-size: 0.6rem;">SAAS v3.0</span>
+            <a class="navbar-brand d-flex align-items-center fw-bold text-white" href="#">
+                <i class="bi bi-shield-lock-fill text-info me-2 fs-3"></i>
+                SPD ORCHESTRATOR <span class="badge bg-info ms-2" style="font-size: 0.6rem;">ENGINE v3.0</span>
             </a>
             <div class="d-flex align-items-center">
                 <div class="text-end me-3">
-                    <div class="small text-secondary">Logged in as</div>
-                    <div class="fw-bold">{{ session['username'] }}</div>
+                    <div class="small text-secondary" style="font-size: 0.75rem;">Active Session</div>
+                    <div class="fw-bold text-info"><i class="bi bi-person-circle me-1"></i> {{ session['username'] }}</div>
                 </div>
-                <a href="/logout" class="btn btn-outline-danger btn-sm">Logout</a>
+                <a href="/logout" class="btn btn-outline-danger btn-sm"><i class="bi bi-box-arrow-right"></i></a>
             </div>
         </div>
     </nav>
@@ -43,41 +79,44 @@
             <div class="col-lg-4">
                 <div class="glass-card p-4">
                     <div class="sidebar-section">
-                        <h6 class="text-info d-flex align-items-center mb-3">
-                            <i class="bi bi-github me-2"></i> ONBOARD REPOSITORY
+                        <h6 class="text-info d-flex align-items-center mb-3 fw-bold">
+                            <i class="bi bi-github me-2 fs-5"></i> SAST TARGET (REPO)
                         </h6>
                         <form action="/add-repo" method="POST">
                             <div class="mb-2"><input type="text" name="owner" class="form-control form-control-sm" placeholder="GitHub Owner" required></div>
-                            <div class="mb-2"><input type="text" name="repo" class="form-control form-control-sm" placeholder="Repo Name" required></div>
-                            <div class="mb-3"><input type="password" name="token" class="form-control form-control-sm" placeholder="GitHub Token (PAT)" required></div>
-                            <button type="submit" class="btn btn-primary-custom btn-sm w-100"><i class="bi bi-plus-lg me-1"></i> Add to Managed Fleet</button>
+                            <div class="mb-2"><input type="text" name="repo" class="form-control form-control-sm" placeholder="Repository Name" required></div>
+                            <div class="mb-3"><input type="password" name="token" class="form-control form-control-sm" placeholder="Personal Access Token" required></div>
+                            <button type="submit" class="btn btn-outline-info btn-sm w-100"><i class="bi bi-plus-lg me-1"></i> Inject Runner</button>
                         </form>
                     </div>
 
                     <div class="sidebar-section border-0 pb-0 mb-0">
-                        <h6 class="text-purple d-flex align-items-center mb-3" style="color: #a78bfa;">
-                            <i class="bi bi-globe me-2"></i> ONBOARD LIVE URL
+                        <h6 class="d-flex align-items-center mb-3 fw-bold" style="color: #a78bfa;">
+                            <i class="bi bi-globe2 me-2 fs-5"></i> DAST TARGET (URL)
                         </h6>
                         <form action="/add-url" method="POST">
-                            <div class="mb-2"><input type="text" name="name" class="form-control form-control-sm" placeholder="Target Shop Name" required></div>
-                            <div class="mb-3"><input type="url" name="url" class="form-control form-control-sm" placeholder="https://shop-a.com" required></div>
-                            <button type="submit" class="btn btn-sm w-100 fw-bold" style="background: #7c3aed; color: white;"><i class="bi bi-broadcast me-1"></i> Register SaaS Target</button>
+                            <div class="mb-2"><input type="text" name="name" class="form-control form-control-sm" placeholder="Application Name" required></div>
+                            <div class="mb-3"><input type="url" name="url" class="form-control form-control-sm" placeholder="https://target-app.com" required></div>
+                            <button type="submit" class="btn btn-sm w-100 fw-bold" style="background: rgba(124, 58, 237, 0.2); border: 1px solid #7c3aed; color: #a78bfa;">
+                                <i class="bi bi-plus-lg me-1"></i> Add Perimeter Target
+                            </button>
                         </form>
                     </div>
                 </div>
 
                 <div class="glass-card p-4 mt-4">
-                    <h6 class="text-secondary small mb-3">YOUR MANAGED ASSETS</h6>
-                    <div style="max-height: 200px; overflow-y: auto;">
+                    <h6 class="text-secondary small mb-3 fw-bold"><i class="bi bi-server me-1"></i> ASSET INVENTORY</h6>
+                    <div style="max-height: 250px; overflow-y: auto;">
                         {% for repo in repos %}
-                        <div class="p-2 mb-2 rounded bg-dark d-flex justify-content-between align-items-center">
-                            <span class="small text-truncate"><i class="bi bi-folder2 text-info me-1"></i> {{ repo.repo_name }}</span>
+                        <div class="p-2 mb-2 rounded d-flex justify-content-between align-items-center" style="background: rgba(0,0,0,0.3); border-left: 3px solid #0ea5e9;">
+                            <span class="small text-truncate text-white"><i class="bi bi-folder2 text-info me-2"></i>{{ repo.repo_name }}</span>
                             <a href="/delete-repo/{{ repo.id }}" class="text-danger small"><i class="bi bi-trash"></i></a>
                         </div>
                         {% endfor %}
+                        
                         {% for url in urls %}
-                        <div class="p-2 mb-2 rounded bg-dark d-flex justify-content-between align-items-center">
-                            <span class="small text-truncate"><i class="bi bi-link-45deg text-purple me-1"></i> {{ url.target_name }}</span>
+                        <div class="p-2 mb-2 rounded d-flex justify-content-between align-items-center" style="background: rgba(0,0,0,0.3); border-left: 3px solid #7c3aed;">
+                            <span class="small text-truncate text-white"><i class="bi bi-link-45deg text-purple me-2" style="color: #a78bfa;"></i>{{ url.target_name }}</span>
                             <a href="/delete-url/{{ url.id }}" class="text-danger small"><i class="bi bi-trash"></i></a>
                         </div>
                         {% endfor %}
@@ -87,59 +126,74 @@
 
             <div class="col-lg-8">
                 <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h5 class="mb-0 fw-bold">🔍 CONTINUOUS SECURITY TELEMETRY</h5>
-                    <button class="btn btn-outline-secondary btn-sm" onclick="location.reload()"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+                    <h5 class="mb-0 fw-bold text-white"><i class="bi bi-activity text-success me-2"></i>ORCHESTRATION ENGINE</h5>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="location.reload()"><i class="bi bi-arrow-clockwise me-1"></i> Sync state</button>
                 </div>
 
                 {% for repo in repos %}
                 <div class="repo-group glass-card p-4 d-flex justify-content-between align-items-center mb-3">
                     <div class="d-flex align-items-center">
-                        <div class="bg-info rounded-circle p-3 me-3" style="--bs-bg-opacity: .1;"><i class="bi bi-shield-shaded text-info fs-4"></i></div>
+                        <div class="rounded p-3 me-3" style="background: rgba(14, 165, 233, 0.1); border: 1px solid rgba(14, 165, 233, 0.3);">
+                            <i class="bi bi-file-earmark-code text-info fs-4"></i>
+                        </div>
                         <div>
-                            <span class="badge badge-active mb-1">PIPELINE SECURED</span>
-                            <h6 class="mb-1 text-white">{{ repo.repo_owner }}/{{ repo.repo_name }}</h6>
-                            <div class="d-flex gap-2 align-items-center">
-                                <span class="text-secondary" style="font-size: 0.75rem;"><i class="bi bi-stack me-1"></i> Stack: <b class="text-info">Flask / Python</b></span>
-                                <span class="text-secondary" style="font-size: 0.75rem;"><i class="bi bi-ethernet me-1"></i> Port: <b class="text-info">5000</b></span>
-                            </div>
+                            <span class="badge badge-active mb-1">CI/CD PIPELINE</span>
+                            <h6 class="mb-1 text-white fw-bold">{{ repo.repo_owner }}/{{ repo.repo_name }}</h6>
+                            <div class="text-secondary" style="font-size: 0.75rem;">SAST Engine Ready • Source Code Emulation</div>
                         </div>
                     </div>
-                    <a href="/inject/{{ repo.id }}" class="btn btn-sm px-3 fw-bold" style="background: #0ea5e9; color: white;"><i class="bi bi-lightning-charge-fill me-1"></i> TRIGGER AUDIT</a>
+                    <a href="/inject/{{ repo.id }}" class="btn btn-trigger-sast btn-sm px-4 py-2 text-white"><i class="bi bi-play-fill fs-6 me-1"></i> RUN SAST</a>
                 </div>
                 {% endfor %}
 
                 {% for url in urls %}
-                <div class="repo-group glass-card p-4 d-flex justify-content-between align-items-center mb-3" style="border-right: 4px solid #7c3aed;">
+                <div class="repo-group glass-card p-4 d-flex justify-content-between align-items-center mb-4 border-start border-4 border-primary" style="border-color: #7c3aed !important;">
                     <div class="d-flex align-items-center">
-                        <div class="bg-purple rounded-circle p-3 me-3" style="background: rgba(124, 58, 237, 0.1);"><i class="bi bi-globe2 text-purple fs-4" style="color: #a78bfa;"></i></div>
+                        <div class="rounded p-3 me-3" style="background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3);">
+                            <i class="bi bi-globe2 fs-4" style="color: #a78bfa;"></i>
+                        </div>
                         <div>
-                            <span class="badge badge-url mb-1">LIVE TARGET MONITORING</span>
-                            <h6 class="mb-1 text-white">{{ url.target_name }}</h6>
-                            <p class="small text-secondary mb-0 text-truncate" style="max-width: 250px;">{{ url.target_url }}</p>
+                            <span class="badge badge-url mb-1">LIVE PERIMETER</span>
+                            <h6 class="mb-1 text-white fw-bold">{{ url.target_name }}</h6>
+                            <p class="small text-secondary mb-0 text-truncate" style="max-width: 280px;"><i class="bi bi-link me-1"></i>{{ url.target_url }}</p>
                         </div>
                     </div>
-                    <a href="/scan-url/{{ url.id }}" class="btn btn-sm px-3 fw-bold" style="background: #7c3aed; color: white;"><i class="bi bi-broadcast me-1"></i> SCAN URL</a>
+                    <a href="/scan-url/{{ url.id }}" class="btn btn-trigger-dast btn-sm px-4 py-2 text-white"><i class="bi bi-broadcast fs-6 me-1"></i> RUN DAST</a>
                 </div>
                 {% endfor %}
 
-                <h6 class="mt-5 mb-3 text-secondary small">LATEST AUDIT LOGS</h6>
+                <h6 class="mt-5 mb-3 text-secondary small fw-bold"><i class="bi bi-journal-code me-1"></i> TELEMETRY ARTIFACTS & GRADES</h6>
+                
                 {% if reports %}
                     {% for report in reports %}
-                    <div class="glass-card p-3 mb-2 d-flex justify-content-between align-items-center" style="border-left: 2px solid #10b981;">
+                    <div class="glass-card p-3 mb-2 d-flex justify-content-between align-items-center">
                         <div class="d-flex align-items-center">
-                            <i class="bi bi-file-earmark-check text-success fs-5 me-3"></i>
+                            
+                            <div class="grade-{{ report.grade|replace('N/A', 'NA') }} border rounded-circle d-flex justify-content-center align-items-center fw-bold me-3" style="width: 45px; height: 45px; font-size: 1.2rem;">
+                                {{ report.grade }}
+                            </div>
+
                             <div>
-                                <div class="text-white small fw-bold">{{ report }}</div>
-                                <div class="text-secondary" style="font-size: 0.7rem;">Verified on: April 8, 2026</div>
+                                <div class="text-white small fw-bold mb-1">
+                                    {% if report.report_type == 'ZAP' %}
+                                        <i class="bi bi-shield-x text-purple me-1" style="color: #a78bfa;"></i> 
+                                    {% else %}
+                                        <i class="bi bi-bug text-info me-1"></i> 
+                                    {% endif %}
+                                    {{ report.report_name }}
+                                </div>
+                                <div class="text-secondary" style="font-size: 0.7rem;">
+                                    Status: <span class="text-light">{{ report.status }}</span>
+                                </div>
                             </div>
                         </div>
-                        <a href="/report/{{ session['username'] }}/{{ report }}" class="btn btn-outline-info btn-sm px-3" style="font-size: 0.7rem;">VIEW FINDINGS</a>
+                        <a href="/report/{{ session['username'] }}/{{ report.report_name }}" class="btn btn-outline-light btn-sm px-3" style="font-size: 0.75rem;">Download Artifact</a>
                     </div>
                     {% endfor %}
                 {% else %}
-                    <div class="text-center py-5 glass-card">
+                    <div class="text-center py-5 glass-card" style="border: 1px dashed rgba(255,255,255,0.1);">
                         <i class="bi bi-inbox fs-1 text-secondary mb-3 d-block"></i>
-                        <p class="text-secondary">No telemetry signals received. Trigger an audit to begin analysis.</p>
+                        <p class="text-secondary small">No telemetry signals received.<br>Trigger an audit to generate your first security grade.</p>
                     </div>
                 {% endif %}
             </div>
