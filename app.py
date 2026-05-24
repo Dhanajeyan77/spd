@@ -1,14 +1,14 @@
 import os, base64, requests, json, smtplib, psycopg2
 from psycopg2.extras import RealDictCursor
 from email.message import EmailMessage
-from flask import Flask, render_template, request, redirect, session, send_from_directory
+from flask import Flask, render_template, request, redirect, session, send_from_directory, Response 
 from celery import Celery 
+from celery.schedules import crontab # NEW: Required for Approach A (Scheduled Scans)
 
 app = Flask(__name__)
 app.secret_key = "kamaraj_spd_secret"
 
 # --- CELERY & REDIS CONFIGURATION ---
-# HARDCODED FOR TESTING ONLY - DO NOT COMMIT TO GITHUB
 HARDCODED_REDIS = "rediss://default:gQAAAAAAAg5ZAAIgcDI1MjRlNjIwNjFkYzg0OTFiYjkwYTRkOGRkNTMyMzU2ZQ@huge-skunk-134745.upstash.io:6379?ssl_cert_reqs=CERT_NONE"
 
 app.config['CELERY_BROKER_URL'] = HARDCODED_REDIS
@@ -16,6 +16,15 @@ app.config['CELERY_RESULT_BACKEND'] = HARDCODED_REDIS
 
 celery = Celery(app.name, broker=app.config['CELERY_BROKER_URL'])
 celery.conf.update(app.config)
+
+# NEW: Approach A - Celery Beat Scheduler
+# Wakes up every Sunday at Midnight to run a continuous perimeter scan on all registered URLs
+celery.conf.beat_schedule = {
+    'weekly-url-perimeter-scan': {
+        'task': 'app.async_trigger_all_urls',
+        'schedule': crontab(hour=0, minute=0, day_of_week='sun'),
+    },
+}
 
 # --- CONFIGURATION ---
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
@@ -29,11 +38,9 @@ if not os.path.exists(REPORT_DIR):
 
 # --- DB HELPER ---
 def get_db():
-    # Sanitizing DSN for Neon PostgreSQL compatibility
     clean_url = DATABASE_URL.strip().replace('"', '').replace("'", "").replace('\n', '').replace('\r', '')
     return psycopg2.connect(clean_url, cursor_factory=RealDictCursor)
 
-# --- SECURITY GRADING ENGINE ---
 # --- SECURITY GRADING ENGINE ---
 def calculate_security_grade(content, report_type):
     """Parses raw telemetry text (not files!) and applies the A/B/C Risk Matrix."""
@@ -60,6 +67,7 @@ def calculate_security_grade(content, report_type):
     except Exception as e:
         print(f"⚠️ Grading Parsing Error: {e}")
         return 'N/A'
+
 # --- EMAIL ENGINE ---
 def send_audit_email(email, filename, username):
     msg = EmailMessage()
@@ -153,6 +161,28 @@ jobs:
     else:
         return f"Failed: API returned {response.status_code}"
 
+# NEW: Approach A Worker - Queries all target URLs and fires off GitHub Action scans automatically
+@celery.task(bind=True)
+def async_trigger_all_urls(self):
+    print("🕒 [CRON] Initiating scheduled perimeter scans...")
+    conn = get_db(); cur = conn.cursor()
+    cur.execute("SELECT users.username, url_targets.target_url FROM url_targets JOIN users ON url_targets.user_id = users.id")
+    targets = cur.fetchall()
+    cur.close(); conn.close()
+
+    GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
+    OWNER = "Dhanajeyan77"
+    REPO = "SPD-Engine-Runner"
+    dispatch_url = f"https://api.github.com/repos/{OWNER}/{REPO}/actions/workflows/main.yml/dispatches"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+
+    for target in targets:
+        payload = {"ref": "main", "inputs": {"username": target['username'], "target_url": target['target_url']}}
+        requests.post(dispatch_url, json=payload, headers=headers)
+        print(f"🚀 [CRON] Triggered DAST scan for {target['target_url']}")
+    
+    return f"Dispatched {len(targets)} scheduled scans."
+
 # --- DASHBOARD & FLEET MANAGEMENT ---
 @app.route('/dashboard')
 def dashboard():
@@ -165,8 +195,6 @@ def dashboard():
     cur.execute("SELECT * FROM url_targets WHERE user_id=%s", (session['user_id'],))
     urls = cur.fetchall()
     
-    # NEW: Fetching the actual graded reports from the database!
-    # Replace your current scan_reports query in the dashboard route with this:
     cur.execute("""
         SELECT *, TO_CHAR(created_at, 'Mon DD, YYYY - HH12:MI AM') as scan_date 
         FROM scan_reports 
@@ -214,7 +242,6 @@ def history():
     if 'user_id' not in session: return redirect('/')
     conn = get_db(); cur = conn.cursor()
     
-    # We fetch ALL reports and format the date specifically for calendar filtering
     cur.execute("""
         SELECT *, 
         TO_CHAR(created_at, 'YYYY-MM-DD') as raw_date,
@@ -227,6 +254,7 @@ def history():
     
     cur.close(); conn.close()
     return render_template('history.html', reports=all_reports)
+
 # --- ORCHESTRATION ---
 @app.route('/inject/<int:repo_id>')
 def inject_workflow(repo_id):
@@ -248,6 +276,36 @@ def inject_workflow(repo_id):
         
     return redirect('/dashboard')
 
+# NEW: Approach B - External CI/CD Webhook
+# Vercel, AWS, or developers ping this URL when they finish a deployment to trigger an instant scan
+@app.route('/api/webhook/trigger', methods=['POST'])
+def external_webhook():
+    data = request.json
+    if not data: return "Invalid Payload", 400
+
+    api_key = data.get('spd_api_key')
+    target_url = data.get('target_url')
+    username = data.get('username')
+
+    # Security check: Make sure unauthorized people can't spam your engine
+    if api_key != "SUPER_SECRET_KEY":
+        return "Unauthorized", 401
+
+    GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
+    OWNER = "Dhanajeyan77"
+    REPO = "SPD-Engine-Runner"
+    dispatch_url = f"https://api.github.com/repos/{OWNER}/{REPO}/actions/workflows/main.yml/dispatches"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+    
+    payload = {"ref": "main", "inputs": {"username": username, "target_url": target_url}}
+    res = requests.post(dispatch_url, json=payload, headers=headers)
+
+    if res.status_code == 204:
+        print(f"🔗 [WEBHOOK] External pipeline triggered scan for {target_url}")
+        return "SaaS Perimeter Scan Queued Successfully", 202
+    else:
+        return f"Failed to trigger scan: {res.text}", 500
+
 # --- TELEMETRY INGESTION ---
 @app.route('/upload-report', methods=['POST'])
 def upload_report():
@@ -262,14 +320,10 @@ def upload_report():
         report_text = ""
 
         if file:
-            # 1. Read the physical file into a massive text string
             report_text = file.read().decode('utf-8', errors='ignore')
-            
-            # 2. Grade the text directly in memory
             security_grade = calculate_security_grade(report_text, report_type)
             print(f"📊 Telemetry Graded In-Memory: {filename} received Grade {security_grade}")
 
-        # 3. Save everything, including the massive HTML text, into the database!
         conn = get_db(); cur = conn.cursor()
         cur.execute("""
             INSERT INTO scan_reports (user_id, report_name, report_type, status, grade, report_content)
@@ -285,7 +339,6 @@ def upload_report():
 # --- ARTIFACT RETRIEVAL ---
 @app.route('/report/<username>/<filename>')
 def view_file(username, filename):
-    # Instead of checking the hard drive, we pull the text directly from the database!
     conn = get_db(); cur = conn.cursor()
     cur.execute("""
         SELECT report_content FROM scan_reports 
@@ -296,11 +349,12 @@ def view_file(username, filename):
     cur.close(); conn.close()
 
     if report and report['report_content']:
-        # Flask is incredibly smart. If we hand it raw HTML text, it renders it perfectly in the browser.
-        return report['report_content']
-    
-    return "Report not found or permanently deleted.", 404
+        if filename.endswith('.txt'):
+            return Response(report['report_content'], mimetype='text/plain')
+        else:
+            return report['report_content']
 
+    return "Report not found or permanently deleted.", 404
     
 @app.route('/scan-url/<int:url_id>')
 def scan_live_url(url_id):
@@ -319,22 +373,10 @@ def scan_live_url(url_id):
     REPO = "SPD-Engine-Runner"
     
     dispatch_url = f"https://api.github.com/repos/{OWNER}/{REPO}/actions/workflows/main.yml/dispatches"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
     
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json"
-    }
-    
-    payload = {
-        "ref": "main",
-        "inputs": {
-            "username": session['username'],
-            "target_url": target['target_url']
-        }
-    }
-    
+    payload = {"ref": "main", "inputs": {"username": session['username'], "target_url": target['target_url']}}
     response = requests.post(dispatch_url, json=payload, headers=headers)
-    
     cur.close(); conn.close()
     
     if response.status_code == 204:
