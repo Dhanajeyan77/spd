@@ -13,9 +13,11 @@ if [ -z "$TARGET_URL" ]; then
     echo "🔍 Scanning repository footprint to detect tech stack..."
     
     # --- 1. Smart SAST Detection ---
-    if [ -f "requirements.txt" ] || [ -f "Pipfile" ]; then
+    if [ -f "requirements.txt" ] || [ -f "Pipfile" ] || [ -f "app.py" ]; then
         echo "🐍 Python environment detected. Initializing Bandit..."
-        python3 -m pip install bandit --quiet
+        # FIX 1: Ensure flask is installed so test apps don't crash instantly
+        python3 -m pip install flask bandit --quiet
+        if [ -f "requirements.txt" ]; then python3 -m pip install -r requirements.txt --quiet; fi
         bandit -r . -f txt -o sast_report.txt || true
 
     elif [ -f "package.json" ]; then
@@ -37,6 +39,7 @@ if [ -z "$TARGET_URL" ]; then
 
     # --- 3. Local DAST Emulation ---
     chmod -R 777 .
+    echo "🚀 Booting local application environment..."
     python3 app.py > app_log.txt 2>&1 & 
     echo "⏳ Waiting 30s for Application to stabilize..."
     sleep 30
@@ -45,12 +48,19 @@ if [ -z "$TARGET_URL" ]; then
     docker run --rm -v $(pwd):/zap/wrk/:rw --network=host ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t http://localhost:5000 -r zap_report.html || true
     sudo chown -R $USER:$USER .
     
-    # --- 4. Exfiltrate DAST Report ---
-    UNIQUE_REPORT_NAME="${REPO_NAME}_${USER_ID}_zap.html"
-    mv zap_report.html $UNIQUE_REPORT_NAME
-    
-    echo "📤 Transmitting secure DAST artifact to Orchestrator..."
-    curl -X POST -F "report=@${UNIQUE_REPORT_NAME}" -F "filename=${UNIQUE_REPORT_NAME}" -F "username=${USER_ID}" https://spd-1j53.onrender.com/upload-report
+    # --- 4. Exfiltrate DAST Report (WITH SAFETY CHECK) ---
+    # FIX 2: Only try to upload the file if ZAP actually succeeded in creating it
+    if [ -f "zap_report.html" ]; then
+        UNIQUE_REPORT_NAME="${REPO_NAME}_${USER_ID}_zap.html"
+        mv zap_report.html $UNIQUE_REPORT_NAME
+        
+        echo "📤 Transmitting secure DAST artifact to Orchestrator..."
+        curl -X POST -F "report=@${UNIQUE_REPORT_NAME}" -F "filename=${UNIQUE_REPORT_NAME}" -F "username=${USER_ID}" https://spd-1j53.onrender.com/upload-report
+    else
+        echo "❌ DAST Emulation Failed: 'zap_report.html' was not generated."
+        echo "⚠️ Dumping app_log.txt to diagnose application crash:"
+        cat app_log.txt
+    fi
 
     echo "✅ Repo Audit Complete."
 
@@ -61,15 +71,23 @@ else
     echo "🌐 SPD Engine: Live SaaS Perimeter Scan on $TARGET_URL"
 
     # --- 1. Remote DAST Attack ---
+    # FIX 3: Unlock the directory so the Docker container has permission to save the URL report!
+    chmod -R 777 .
+    
     docker run --rm -v $(pwd):/zap/wrk/:rw --network=host ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t $TARGET_URL -r zap_report.html || true
+    
     sudo chown -R $USER:$USER .
 
-    # --- 2. Exfiltrate DAST Report ---
-    UNIQUE_REPORT_NAME="URL_SCAN_${USER_ID}_zap.html"
-    mv zap_report.html $UNIQUE_REPORT_NAME
+    # --- 2. Exfiltrate DAST Report (WITH SAFETY CHECK) ---
+    if [ -f "zap_report.html" ]; then
+        UNIQUE_REPORT_NAME="URL_SCAN_${USER_ID}_zap.html"
+        mv zap_report.html $UNIQUE_REPORT_NAME
 
-    echo "📤 Transmitting secure DAST artifact to Orchestrator..."
-    curl -X POST -F "report=@${UNIQUE_REPORT_NAME}" -F "filename=${UNIQUE_REPORT_NAME}" -F "username=${USER_ID}" https://spd-1j53.onrender.com/upload-report
+        echo "📤 Transmitting secure DAST artifact to Orchestrator..."
+        curl -X POST -F "report=@${UNIQUE_REPORT_NAME}" -F "filename=${UNIQUE_REPORT_NAME}" -F "username=${USER_ID}" https://spd-1j53.onrender.com/upload-report
+    else
+        echo "❌ URL DAST Scan Failed: 'zap_report.html' was not generated due to container permissions or an invalid target."
+    fi
 
     echo "✅ URL Audit Complete."
 fi
