@@ -34,34 +34,32 @@ def get_db():
     return psycopg2.connect(clean_url, cursor_factory=RealDictCursor)
 
 # --- SECURITY GRADING ENGINE ---
-def calculate_security_grade(file_path, report_type):
-    """Parses raw telemetry files and applies the A/B/C Risk Matrix."""
+# --- SECURITY GRADING ENGINE ---
+def calculate_security_grade(content, report_type):
+    """Parses raw telemetry text (not files!) and applies the A/B/C Risk Matrix."""
     try:
-        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-            content = f.read().lower()
-
+        content_lower = content.lower()
         high_count = 0
         medium_count = 0
 
         if report_type == 'Bandit':
-            high_count = content.count('severity: high')
-            medium_count = content.count('severity: medium')
+            high_count = content_lower.count('severity: high')
+            medium_count = content_lower.count('severity: medium')
             
         elif report_type == 'ZAP':
-            high_count = content.count('risk-3') # High
-            medium_count = content.count('risk-2') # Medium
+            high_count = content_lower.count('risk-3') 
+            medium_count = content_lower.count('risk-2') 
 
         if high_count >= 1 or medium_count >= 3:
-            return 'C' # Critical Exposure
+            return 'C' 
         elif medium_count > 0:
-            return 'B' # Functional Security
+            return 'B' 
         else:
-            return 'A' # Secure Perimeter
+            return 'A' 
 
     except Exception as e:
         print(f"⚠️ Grading Parsing Error: {e}")
         return 'N/A'
-
 # --- EMAIL ENGINE ---
 def send_audit_email(email, filename, username):
     msg = EmailMessage()
@@ -257,37 +255,26 @@ def upload_report():
         un = request.form.get('username')
         filename = request.form.get('filename')
         file = request.files.get('report')
-        report_url = request.form.get('report_url') 
         
         report_type = 'ZAP' if 'zap' in filename.lower() or 'dast' in filename.lower() else 'Bandit'
         security_grade = 'N/A'
         final_status = 'Completed'
+        report_text = ""
 
         if file:
-            user_path = os.path.join(REPORT_DIR, un)
-            os.makedirs(user_path, exist_ok=True)
-            file_path = os.path.join(user_path, filename)
-            file.save(file_path)
-            security_grade = calculate_security_grade(file_path, report_type)
-            print(f"📊 Physical Telemetry Graded: {filename} received Grade {security_grade}")
+            # 1. Read the physical file into a massive text string
+            report_text = file.read().decode('utf-8', errors='ignore')
+            
+            # 2. Grade the text directly in memory
+            security_grade = calculate_security_grade(report_text, report_type)
+            print(f"📊 Telemetry Graded In-Memory: {filename} received Grade {security_grade}")
 
-        elif report_url:
-            final_status = report_url 
-            resp = requests.get(report_url)
-            if resp.status_code == 200:
-                content = resp.text.lower()
-                high = content.count('risk-3')
-                med = content.count('risk-2')
-                if high >= 1 or med >= 3: security_grade = 'C'
-                elif med > 0: security_grade = 'B'
-                else: security_grade = 'A'
-            print(f"🔗 URL Telemetry Graded: Hosted at {report_url} received Grade {security_grade}")
-
+        # 3. Save everything, including the massive HTML text, into the database!
         conn = get_db(); cur = conn.cursor()
         cur.execute("""
-            INSERT INTO scan_reports (user_id, report_name, report_type, status, grade)
-            VALUES ((SELECT id FROM users WHERE username=%s), %s, %s, %s, %s)
-        """, (un, filename, report_type, final_status, security_grade))
+            INSERT INTO scan_reports (user_id, report_name, report_type, status, grade, report_content)
+            VALUES ((SELECT id FROM users WHERE username=%s), %s, %s, %s, %s, %s)
+        """, (un, filename, report_type, final_status, security_grade, report_text))
         conn.commit(); cur.close(); conn.close()
         
         return "OK", 200
@@ -295,13 +282,26 @@ def upload_report():
         print(f"Ingestion Error: {e}")
         return str(e), 500
 
+# --- ARTIFACT RETRIEVAL ---
 @app.route('/report/<username>/<filename>')
 def view_file(username, filename):
-    user_path = os.path.join(REPORT_DIR, username)
-    if not os.path.exists(os.path.join(user_path, filename)):
-        return "Report file not found", 404
-    return send_from_directory(user_path, filename)
+    # Instead of checking the hard drive, we pull the text directly from the database!
+    conn = get_db(); cur = conn.cursor()
+    cur.execute("""
+        SELECT report_content FROM scan_reports 
+        WHERE user_id=(SELECT id FROM users WHERE username=%s) AND report_name=%s
+        ORDER BY id DESC LIMIT 1
+    """, (username, filename))
+    report = cur.fetchone()
+    cur.close(); conn.close()
 
+    if report and report['report_content']:
+        # Flask is incredibly smart. If we hand it raw HTML text, it renders it perfectly in the browser.
+        return report['report_content']
+    
+    return "Report not found or permanently deleted.", 404
+
+    
 @app.route('/scan-url/<int:url_id>')
 def scan_live_url(url_id):
     if 'user_id' not in session: return redirect('/')
