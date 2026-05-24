@@ -9,16 +9,17 @@ app = Flask(__name__)
 app.secret_key = "kamaraj_spd_secret"
 
 # --- CELERY & REDIS CONFIGURATION ---
+# --- CELERY & REDIS CONFIGURATION ---
 HARDCODED_REDIS = "rediss://default:gQAAAAAAAg5ZAAIgcDI1MjRlNjIwNjFkYzg0OTFiYjkwYTRkOGRkNTMyMzU2ZQ@huge-skunk-134745.upstash.io:6379?ssl_cert_reqs=CERT_NONE"
 
-app.config['CELERY_BROKER_URL'] = HARDCODED_REDIS
-app.config['CELERY_RESULT_BACKEND'] = HARDCODED_REDIS
+REDIS_URL = os.environ.get('REDIS_URL', HARDCODED_REDIS)
 
-celery = Celery(app.name, broker=app.config['CELERY_BROKER_URL'])
-celery.conf.update(app.config)
+# Initialize Celery using the modern, lowercase configuration standard
+celery = Celery(app.name)
+celery.conf.broker_url = REDIS_URL
+celery.conf.result_backend = REDIS_URL
 
-# NEW: Approach A - Celery Beat Scheduler
-# Wakes up every Sunday at Midnight to run a continuous perimeter scan on all registered URLs
+# Approach A - Celery Beat Scheduler
 celery.conf.beat_schedule = {
     'weekly-url-perimeter-scan': {
         'task': 'app.async_trigger_all_urls',
