@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPD | Audit History</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        body { background-color: #050b14; background-image: radial-gradient(#1e293b 1px, transparent 1px); background-size: 24px 24px; color: #e2e8f0; font-family: 'Inter', system-ui, sans-serif; }
+        .glass-card { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; }
+        .nav-custom { border-bottom: 1px solid #1e293b; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); }
+        .form-control { background: rgba(0,0,0,0.2); border: 1px solid #334155; color: white; color-scheme: dark; }
+        .form-control:focus { background: rgba(0,0,0,0.4); border-color: #3b82f6; box-shadow: none; color: white; }
+        .grade-A { color: #10b981; border-color: #10b981; background: rgba(16, 185, 129, 0.1); }
+        .grade-B { color: #f59e0b; border-color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
+        .grade-C { color: #ef4444; border-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+        .grade-NA { color: #64748b; border-color: #64748b; background: rgba(100, 116, 139, 0.1); }
+    </style>
+</head>
+<body>
+    <nav class="navbar nav-custom py-3 mb-4 sticky-top">
+        <div class="container">
+            <a class="navbar-brand d-flex align-items-center fw-bold text-white" href="/dashboard">
+                <i class="bi bi-arrow-left-circle text-info me-2 fs-3"></i>
+                Back to Dashboard
+            </a>
+            <div class="d-flex align-items-center">
+                <div class="fw-bold text-info"><i class="bi bi-person-circle me-1"></i> {{ session['username'] }}</div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container pb-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h4 class="fw-bold text-white"><i class="bi bi-archive text-purple me-2" style="color: #a78bfa;"></i> Compliance Audit Log</h4>
+            
+            <div class="d-flex align-items-center gap-2">
+                <label class="text-secondary small fw-bold mb-0">Filter by Date:</label>
+                <input type="date" id="dateFilter" class="form-control form-control-sm" style="width: 150px;">
+                <button onclick="clearFilter()" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-lg"></i></button>
+            </div>
+        </div>
+
+        <div class="glass-card p-0 overflow-hidden">
+            <table class="table table-dark table-hover mb-0" style="background: transparent;">
+                <thead style="background: rgba(0,0,0,0.5);">
+                    <tr>
+                        <th class="ps-4 py-3 text-secondary small fw-bold">DATE & TIME</th>
+                        <th class="py-3 text-secondary small fw-bold">REPORT ASSET</th>
+                        <th class="py-3 text-secondary small fw-bold">TYPE</th>
+                        <th class="py-3 text-secondary small fw-bold text-center">GRADE</th>
+                        <th class="pe-4 py-3 text-secondary small fw-bold text-end">ACTION</th>
+                    </tr>
+                </thead>
+                <tbody id="reportTableBody">
+                    {% for report in reports %}
+                    <tr class="report-row align-middle" data-date="{{ report.raw_date }}">
+                        <td class="ps-4 py-3">
+                            <div class="text-white fw-bold">{{ report.nice_date }}</div>
+                            <div class="text-secondary small">{{ report.nice_time }}</div>
+                        </td>
+                        <td class="py-3 text-light">{{ report.report_name }}</td>
+                        <td class="py-3">
+                            {% if report.report_type == 'ZAP' %}
+                                <span class="badge bg-purple bg-opacity-25 border border-purple text-light" style="border-color: #a78bfa !important; color: #a78bfa !important;"><i class="bi bi-globe me-1"></i> DAST</span>
+                            {% else %}
+                                <span class="badge bg-info bg-opacity-25 border border-info text-info"><i class="bi bi-code-slash me-1"></i> SAST</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3 text-center">
+                            <div class="grade-{{ report.grade|replace('N/A', 'NA') }} border rounded-circle d-inline-flex justify-content-center align-items-center fw-bold" style="width: 35px; height: 35px;">
+                                {{ report.grade }}
+                            </div>
+                        </td>
+                        <td class="pe-4 py-3 text-end">
+                            <a href="/report/{{ session['username'] }}/{{ report.report_name }}" target="_blank" class="btn btn-outline-light btn-sm"><i class="bi bi-download me-1"></i> View</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            
+            {% if not reports %}
+            <div class="text-center py-5">
+                <i class="bi bi-folder-x fs-1 text-secondary mb-3 d-block"></i>
+                <p class="text-secondary">No historical audit logs found.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('dateFilter').addEventListener('change', function() {
+            let selectedDate = this.value; // Format: YYYY-MM-DD
+            let rows = document.querySelectorAll('.report-row');
+            
+            rows.forEach(row => {
+                // If no date is selected OR the row's date matches the calendar date, show it
+                if (!selectedDate || row.getAttribute('data-date') === selectedDate) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+
+        function clearFilter() {
+            document.getElementById('dateFilter').value = '';
+            document.querySelectorAll('.report-row').forEach(row => row.style.display = '');
+        }
+    </script>
+</body>
+</html>

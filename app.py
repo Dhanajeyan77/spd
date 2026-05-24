@@ -168,7 +168,12 @@ def dashboard():
     urls = cur.fetchall()
     
     # NEW: Fetching the actual graded reports from the database!
-    cur.execute("SELECT * FROM scan_reports WHERE user_id=%s ORDER BY id DESC", (session['user_id'],))
+    # Replace your current scan_reports query in the dashboard route with this:
+    cur.execute("""
+        SELECT *, TO_CHAR(created_at, 'Mon DD, YYYY - HH12:MI AM') as scan_date 
+        FROM scan_reports 
+        WHERE user_id=%s ORDER BY created_at DESC
+    """, (session['user_id'],))
     reports = cur.fetchall()
     
     cur.close(); conn.close()
@@ -206,6 +211,24 @@ def add_url():
     conn.commit(); cur.close(); conn.close()
     return redirect('/dashboard')
 
+@app.route('/history')
+def history():
+    if 'user_id' not in session: return redirect('/')
+    conn = get_db(); cur = conn.cursor()
+    
+    # We fetch ALL reports and format the date specifically for calendar filtering
+    cur.execute("""
+        SELECT *, 
+        TO_CHAR(created_at, 'YYYY-MM-DD') as raw_date,
+        TO_CHAR(created_at, 'Day, Mon DD, YYYY') as nice_date,
+        TO_CHAR(created_at, 'HH12:MI AM') as nice_time
+        FROM scan_reports 
+        WHERE user_id=%s ORDER BY created_at DESC
+    """, (session['user_id'],))
+    all_reports = cur.fetchall()
+    
+    cur.close(); conn.close()
+    return render_template('history.html', reports=all_reports)
 # --- ORCHESTRATION ---
 @app.route('/inject/<int:repo_id>')
 def inject_workflow(repo_id):

@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <style>
-        /* Modern Cyber-Grid Background */
         body { 
             background-color: #050b14; 
             background-image: radial-gradient(#1e293b 1px, transparent 1px);
@@ -16,38 +15,19 @@
             font-family: 'Inter', system-ui, sans-serif; 
         }
         
-        .glass-card { 
-            background: rgba(15, 23, 42, 0.85); 
-            backdrop-filter: blur(16px); 
-            border: 1px solid rgba(255, 255, 255, 0.05); 
-            border-radius: 12px; 
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3); 
-            transition: transform 0.2s ease, border-color 0.2s ease;
-        }
-        
-        .glass-card:hover {
-            border-color: rgba(59, 130, 246, 0.3);
-            transform: translateY(-2px);
-        }
-
+        .glass-card { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3); transition: transform 0.2s ease, border-color 0.2s ease; }
+        .glass-card:hover { border-color: rgba(59, 130, 246, 0.3); transform: translateY(-2px); }
         .nav-custom { border-bottom: 1px solid #1e293b; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); }
         .sidebar-section { border-bottom: 1px solid #1e293b; padding-bottom: 20px; margin-bottom: 20px; }
-        
-        /* Custom Inputs */
         .form-control { background: rgba(0,0,0,0.2); border: 1px solid #334155; color: white; }
         .form-control:focus { background: rgba(0,0,0,0.4); border-color: #3b82f6; box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25); color: white; }
-        
-        /* Badges & Buttons */
         .badge-active { background: rgba(5, 150, 105, 0.2); border: 1px solid #059669; color: #34d399; font-size: 0.65rem; letter-spacing: 1px; }
         .badge-url { background: rgba(124, 58, 237, 0.2); border: 1px solid #7c3aed; color: #a78bfa; font-size: 0.65rem; letter-spacing: 1px; }
-        
         .btn-trigger-sast { background: linear-gradient(135deg, #0ea5e9, #2563eb); border: none; font-weight: 600; box-shadow: 0 4px 10px rgba(14, 165, 233, 0.3); transition: all 0.2s;}
         .btn-trigger-sast:hover { opacity: 0.9; transform: scale(1.02); color: white; }
-        
         .btn-trigger-dast { background: linear-gradient(135deg, #8b5cf6, #6d28d9); border: none; font-weight: 600; box-shadow: 0 4px 10px rgba(139, 92, 246, 0.3); transition: all 0.2s;}
         .btn-trigger-dast:hover { opacity: 0.9; transform: scale(1.02); color: white; }
 
-        /* Dynamic Grade Colors */
         .grade-A { color: #10b981; border-color: #10b981; background: rgba(16, 185, 129, 0.1); }
         .grade-B { color: #f59e0b; border-color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
         .grade-C { color: #ef4444; border-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
@@ -64,8 +44,11 @@
                 <i class="bi bi-shield-lock-fill text-info me-2 fs-3"></i>
                 SPD ORCHESTRATOR <span class="badge bg-info ms-2" style="font-size: 0.6rem;">ENGINE v3.0</span>
             </a>
-            <div class="d-flex align-items-center">
-                <div class="text-end me-3">
+            
+            <div class="d-flex align-items-center gap-3">
+                <a href="/history" class="btn btn-outline-info btn-sm fw-bold"><i class="bi bi-calendar-check me-1"></i> Audit History</a>
+                
+                <div class="text-end me-3 d-none d-md-block border-start border-secondary ps-3">
                     <div class="small text-secondary" style="font-size: 0.75rem;">Active Session</div>
                     <div class="fw-bold text-info"><i class="bi bi-person-circle me-1"></i> {{ session['username'] }}</div>
                 </div>
@@ -79,9 +62,7 @@
             <div class="col-lg-4">
                 <div class="glass-card p-4">
                     <div class="sidebar-section">
-                        <h6 class="text-info d-flex align-items-center mb-3 fw-bold">
-                            <i class="bi bi-github me-2 fs-5"></i> SAST TARGET (REPO)
-                        </h6>
+                        <h6 class="text-info d-flex align-items-center mb-3 fw-bold"><i class="bi bi-github me-2 fs-5"></i> SAST TARGET (REPO)</h6>
                         <form action="/add-repo" method="POST">
                             <div class="mb-2"><input type="text" name="owner" class="form-control form-control-sm" placeholder="GitHub Owner" required></div>
                             <div class="mb-2"><input type="text" name="repo" class="form-control form-control-sm" placeholder="Repository Name" required></div>
@@ -91,9 +72,7 @@
                     </div>
 
                     <div class="sidebar-section border-0 pb-0 mb-0">
-                        <h6 class="d-flex align-items-center mb-3 fw-bold" style="color: #a78bfa;">
-                            <i class="bi bi-globe2 me-2 fs-5"></i> DAST TARGET (URL)
-                        </h6>
+                        <h6 class="d-flex align-items-center mb-3 fw-bold" style="color: #a78bfa;"><i class="bi bi-globe2 me-2 fs-5"></i> DAST TARGET (URL)</h6>
                         <form action="/add-url" method="POST">
                             <div class="mb-2"><input type="text" name="name" class="form-control form-control-sm" placeholder="Application Name" required></div>
                             <div class="mb-3"><input type="url" name="url" class="form-control form-control-sm" placeholder="https://target-app.com" required></div>
@@ -137,12 +116,16 @@
                             <i class="bi bi-file-earmark-code text-info fs-4"></i>
                         </div>
                         <div>
-                            <span class="badge badge-active mb-1">CI/CD PIPELINE</span>
+                            <span class="badge badge-active mb-1">BIMODAL PIPELINE</span>
                             <h6 class="mb-1 text-white fw-bold">{{ repo.repo_owner }}/{{ repo.repo_name }}</h6>
-                            <div class="text-secondary" style="font-size: 0.75rem;">SAST Engine Ready • Source Code Emulation</div>
+                            <div class="text-secondary fw-bold" style="font-size: 0.75rem;">
+                                <span class="text-info"><i class="bi bi-code-slash me-1"></i>SAST</span> + 
+                                <span style="color: #a78bfa;"><i class="bi bi-globe me-1"></i>DAST</span> 
+                                (Full Emulation)
+                            </div>
                         </div>
                     </div>
-                    <a href="/inject/{{ repo.id }}" class="btn btn-trigger-sast btn-sm px-4 py-2 text-white"><i class="bi bi-play-fill fs-6 me-1"></i> RUN SAST</a>
+                    <a href="/inject/{{ repo.id }}" class="btn btn-trigger-sast btn-sm px-4 py-2 text-white"><i class="bi bi-play-fill fs-6 me-1"></i> RUN SAST + DAST</a>
                 </div>
                 {% endfor %}
 
@@ -164,6 +147,15 @@
 
                 <h6 class="mt-5 mb-3 text-secondary small fw-bold"><i class="bi bi-journal-code me-1"></i> TELEMETRY ARTIFACTS & GRADES</h6>
                 
+                <div class="glass-card p-3 mb-4 d-none d-md-flex justify-content-between align-items-center" style="background: rgba(15, 23, 42, 0.4); border: 1px dashed rgba(255,255,255,0.1);">
+                    <div class="d-flex align-items-center gap-4">
+                        <span class="text-secondary small fw-bold"><i class="bi bi-info-circle me-1"></i> MATRIX KEY:</span>
+                        <div class="d-flex align-items-center" style="font-size: 0.75rem;"><span class="badge rounded-pill bg-success bg-opacity-25 text-success border border-success me-2">A</span> Secure Perimeter</div>
+                        <div class="d-flex align-items-center" style="font-size: 0.75rem;"><span class="badge rounded-pill bg-warning bg-opacity-25 text-warning border border-warning me-2">B</span> Functional Security</div>
+                        <div class="d-flex align-items-center" style="font-size: 0.75rem;"><span class="badge rounded-pill bg-danger bg-opacity-25 text-danger border border-danger me-2">C</span> Critical Exposure</div>
+                    </div>
+                </div>
+                
                 {% if reports %}
                     {% for report in reports %}
                     <div class="glass-card p-3 mb-2 d-flex justify-content-between align-items-center">
@@ -183,11 +175,11 @@
                                     {{ report.report_name }}
                                 </div>
                                 <div class="text-secondary" style="font-size: 0.7rem;">
-                                    Status: <span class="text-light">{{ report.status }}</span>
+                                    <i class="bi bi-clock me-1"></i> {{ report.scan_date }} | Status: <span class="text-light">{{ report.status }}</span>
                                 </div>
                             </div>
                         </div>
-                        <a href="/report/{{ session['username'] }}/{{ report.report_name }}" class="btn btn-outline-light btn-sm px-3" style="font-size: 0.75rem;">Download Artifact</a>
+                        <a href="/report/{{ session['username'] }}/{{ report.report_name }}" target="_blank" class="btn btn-outline-light btn-sm px-3" style="font-size: 0.75rem;"><i class="bi bi-box-arrow-up-right me-1"></i> View Report</a>
                     </div>
                     {% endfor %}
                 {% else %}
